@@ -2,10 +2,9 @@
 title: "STA 9750"
 ---
 
-Link to my [Github](https://github.com/WillYum-Sea/STA9750-2026-FALL/projects)
+Link to my [Github](https://github.com/WillYum-Sea)
 
 I'm Willie. I'm 24 and I like long walks on the beach.
-
 
 
 ```{r}
