@@ -1,7 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://WillYum-Sea.github.io/STA9750-2026-FALL/index.html</loc>
-    <lastmod>2026-09-05T04:01:08.419Z</lastmod>
+    <loc>https://WillYum-Sea.github.io/STA9750-2026-FALL/pages/resume.html</loc>
+    <lastmod>2026-09-15T22:53:16.908Z</lastmod>
+  </url>
+  <url>
+    <loc>https://WillYum-Sea.github.io/STA9750-2026-FALL/pages/index.html</loc>
+    <lastmod>2026-09-15T22:27:02.248Z</lastmod>
+  </url>
+  <url>
+    <loc>https://WillYum-Sea.github.io/STA9750-2026-FALL/pages/about.html</loc>
+    <lastmod>2026-09-14T01:31:09.191Z</lastmod>
+  </url>
+  <url>
+    <loc>https://WillYum-Sea.github.io/STA9750-2026-FALL/pages/projects.html</loc>
+    <lastmod>2026-09-15T20:28:33.316Z</lastmod>
   </url>
 </urlset>

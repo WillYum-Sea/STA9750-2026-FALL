@@ -3,17 +3,29 @@ project:
   output-dir: docs
 
 website:
-  title: "STA 9750 Submission Material"
-  description:
-    Course Projects for STA 9750 at Baruch College
+  title: "Portfolio"
+  description: Portfolio
   site-url: "https://WillYum-Sea.github.io/STA9750-2026-FALL/"
-  navbar:
-    background: primary
+  
+  sidebar:
+    style: "docked"
     search: false
-    
+    contents:
+      - text: "Home"
+        href: pages/index.qmd
+        
+      - text: "About"
+        href: pages/about.qmd
+        
+      - text: "Projects"
+        href: pages/projects.qmd
+        
+      - text: "Résumé"
+        href: pages/resume.qmd
+
 format:
   html:
-    theme: sketchy
+    css: styles.css
     toc: false
 
 editor:

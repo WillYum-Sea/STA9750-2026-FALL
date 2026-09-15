@@ -1,0 +1,13 @@
+---
+title: "Projects"
+format: html
+editor: source
+
+---
+
+# List of Projects
+
+## Reducing Instantaneous Cost of Trading with the I-Star Model
+
+
+ 
