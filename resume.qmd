@@ -1,0 +1,123 @@
+---
+title: "Résumé"
+---
+
+# Willie Carlock
+
+New York, NY · (412) 956-5955 · willcarlock@gmail.com
+
+[LinkedIn](https://www.linkedin.com/in/willie-carlock/)
+
+---
+
+# Education
+
+## Baruch College, Zicklin School of Business
+
+**M.S. Quantitative Methods and Modeling**  
+Expected Graduation: December 2027
+
+**Relevant Coursework**
+
+- Quantitative Methods
+- Software Tools for Data Analytics
+- Modern Regression Analysis
+
+## Fordham University
+
+**B.S. Finance**  
+GPA: 3.492  
+May 2024
+
+**Leadership**
+
+- Resident Assistant
+
+---
+
+# Projects & Competitions
+
+## Fordham Algorithmic Trading
+*Trade Volume Project*  
+**Tools:** Python, Excel  
+January 2024 – May 2024
+
+- Led a team of five in a semester-long project developing market impact models to generate pre-trade and post-trade functions for a basket of 50 stocks.
+- Generated trade recommendations based on model outputs.
+- Utilized Python libraries including pandas, numpy, scipy, statistics, and matplotlib.
+- Built models using implementation shortfall methodology, nonlinear regression, and algorithmic trading data to estimate parameters.
+
+## Fordham Credit Program
+*Distressed Debt Case Projects*  
+**Tools:** Excel  
+August 2023 – May 2024
+
+- Completed more than ten distressed debt and special situations case studies.
+- Analyzed financial statements, liquidity, and capital structure to generate trade recommendations.
+- Performed valuation analyses using comparable companies and comparable transactions methodologies.
+- Modeled bankruptcy recovery rates through analysis of capital structure components and covenant structures.
+
+---
+
+# Professional Experience
+
+## BNY
+*Data Operations Intern*  
+Pittsburgh, PA  
+June 2023 – August 2023
+
+- Designed and implemented data storage, querying, manipulation, and visualization solutions for the Data Operations and Robotics team.
+- Developed a Microsoft Access database supporting cross-department data access across six departments, fifteen teams, and over thirty work processes.
+- Utilized Power Query Editor to import and transform historical datasets.
+- Created visualizations using Tableau and ggplot2 in R.
+- Presented project progress and final recommendations to senior operations management.
+
+## Roasting Plant Coffee
+*Barista, FP&A Analyst*  
+New York, NY  
+September 2024 – January 2026
+
+- Developed scalable FP&A solutions for calculating EBITDA across international store locations.
+- Supported the implementation of Datarails software to automate financial statement preparation and analysis.
+- Worked directly with the Head of Finance on FP&A projects and presented deliverables to the CFO.
+
+---
+
+# Leadership & Volunteer Activities
+
+## Fordham University Residential Life
+*Resident Assistant*  
+August 2021 – May 2024
+
+- Fostered a safe and inclusive residential community serving approximately forty students on a floor within a residence hall of more than four hundred students.
+- Enforced university policy and completed administrative responsibilities.
+- Planned and facilitated approximately twenty programs annually promoting Jesuit values, academic success, and student wellbeing.
+
+## Alternative Investments Club
+*Co-Head Researcher, Private Equity Secondaries*  
+August 2020 – August 2021
+
+- Researched trends within the private equity secondaries market.
+- Produced an annual report distributed to club members.
+- Attended and participated in industry speaker events.
+
+## Fordham University Men's Crew
+*Crew Member*  
+August 2020 – February 2022
+
+- Trained five days per week throughout the academic year.
+
+---
+
+# Skills
+
+## Technical Skills
+
+- Advanced Excel (Pivot Tables, formulas)
+- Python
+- R
+- Basic SQL
+- Tableau
+
+
+Downloadable copy available [here](files/Carlock_Resume_Grad_2026.pdf)!
