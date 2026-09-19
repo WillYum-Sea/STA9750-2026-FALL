@@ -20,6 +20,21 @@ website:
       - text: "Projects"
         href: pages/projects.qmd
         
+      - section: "Course Work"
+        expanded: false
+        contents:
+          - text: "Project 1"
+            href: pages/mp01.qmd
+          
+          - text: "Project 2"
+            href: pages/mp02.qmd
+            
+          - text: "Project 3"
+            href: pages/mp03.qmd
+            
+          - text: "Project 4"
+            href: pages/mp04.qmd
+        
       - text: "Résumé"
         href: pages/resume.qmd
 
