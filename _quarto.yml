@@ -15,28 +15,28 @@ website:
         href: index.qmd
         
       - text: "About"
-        href: pages/about.qmd
+        href: about.qmd
         
       - text: "Projects"
-        href: pages/projects.qmd
+        href: projects.qmd
         
       - section: "Course Work"
         expanded: false
         contents:
           - text: "Project 1"
-            href: pages/mp01.qmd
+            href: mp01.qmd
           
           - text: "Project 2"
-            href: pages/mp02.qmd
+            href: mp02.qmd
             
           - text: "Project 3"
-            href: pages/mp03.qmd
+            href: mp03.qmd
             
           - text: "Project 4"
-            href: pages/mp04.qmd
+            href: mp04.qmd
         
       - text: "Résumé"
-        href: pages/resume.qmd
+        href: resume.qmd
 
 format:
   html:
