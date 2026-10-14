@@ -1,5 +1,360 @@
 ---
 title: "mp01 Placeholder"
-format: html
+format:
+  html:
+    code-tools:
+      source: https://github.com/WillYum-Sea/STA9750-2026-FALL/blob/main/mp01.qmd
+      toggle: true
+      caption: Want to see the code?
 ---
 
+What We Watched: Exploring Netflix Viewing Data
+===============================================
+
+This project demonstrates the following:
+  
+  1. proficiency using the dplyr and gt packages to manipulate data
+  
+  2. an understanding of data cleaning and combination
+  
+  3. the ability to perform descriptive and inferential statistical analysis
+  
+  4. a grasp of data visualizations in R
+  
+
+The goal of this project is to utilize Neflix's publicly available 'What We Watched' report to advise leadership how best to invest their time and money. Using R, we will wrangle the report's data, perform statistical analysis, and summarize our findings in the form of a formal memo.
+
+We'll start with getting the data from that report!
+
+Step 1. Acquiring the Netflix What We Watched Reports
+-----------------------------------------------------
+
+ This function will acquire and standardize all data for MP#01
+ from Netflix. Because Netflix hosts the data files behind a CDN, we
+ are accessing the release pages and automatically extracting links to the
+ relevant files (with CDN hash). 
+
+```{r load-data-input}
+#| include: false
+#| cache: true
+
+load_netflix_data <- function(){
+
+library(tidyverse)
+library(rvest)
+library(readxl)
+library(fs)
+
+data_dir <- path("data", "mp01")
+    
+  if(!dir_exists(data_dir)){
+    dir_create(data_dir, showWarnings=FALSE, recurse=TRUE)
+  }
+  
+  NETFLIX_URLS <- list(
+    `2023H1` = "https://about.netflix.com/news/what-we-watched-a-netflix-engagement-report",
+    `2023H2` = "https://about.netflix.com/news/what-we-watched-the-second-half-of-2023",
+    `2024H1` = "https://about.netflix.com/news/what-we-watched-the-first-half-of-2024",
+    `2024H2` = "https://about.netflix.com/news/what-we-watched-the-second-half-of-2024",
+    `2025H1` = "https://about.netflix.com/news/what-we-watched-the-first-half-of-2025",
+    `2025H2` = "https://about.netflix.com/news/what-we-watched-the-second-half-of-2025",
+    `2026H1` = "https://about.netflix.com/news/what-we-watched-the-first-half-of-2026"
+  )
+  
+  download_if_needed <- function(url, local){
+    if(!file_exists(local)){
+      download.file(url, local, quiet = TRUE, mode = "wb")
+    }
+    
+    return(local)
+  }
+    
+  NETFLIX_URLS |> 
+    map(read_html) |> 
+    map(html_element, xpath = "//a[contains(@href, '.xlsx')]") |> 
+    map_chr(html_attr, "href") |> 
+    enframe("period", "url") |> 
+   mutate(path = path(data_dir, paste0(period, ".xlsx")), 
+          path = map2(url, path, download_if_needed), 
+          data = map(path, read_excel, skip=3, na="*"), 
+          data = map(data, \(x) x |> mutate(`Release Date` = as.Date(`Release Date`)))) |>
+    unnest(data) |> 
+    select(-url, -path) |> 
+    mutate(year=str_sub(period, 1, 4), 
+           half=str_sub(period, start=6), 
+           period_start = make_date(year, if_else(half==1, 1, 7), 1), 
+           period_end = make_date(year, if_else(half==1, 7, 12), if_else(half==1, 30, 31))) |> 
+    filter(!is.na(`Hours Viewed`)) |> 
+    mutate(live_event = !is.na(Runtime) & str_detect(Runtime, "\\d+:\\d+\\*"), 
+           clean_time = str_remove(Runtime, fixed("*")),
+           Runtime = 60 * hour(hm(clean_time)) + minute(hm(clean_time))) |>
+    select(-clean_time) |>
+    mutate(Runtime = coalesce(Runtime, mean(Runtime, na.rm=TRUE)), 
+           .by=Title, 
+           Title = stringi::stri_trans_general(Title, "Latin-ASCII"),
+           Title = str_remove(Title, " // .*"), 
+           Title = str_remove(Title, "[^[:ascii:]].*"), 
+           Title = str_trim(Title)) |>
+    filter_out(Title == "") |>
+    select(year, 
+           period, 
+           period_start, 
+           period_end, 
+           Title, 
+           -half, 
+           Runtime, 
+           Views, 
+           `Hours Viewed`, 
+           `Release Date`,
+           `Available Globally?`, 
+           live_event)
+}
+  
+NETFLIX_DATA <- load_netflix_data()
+
+```
+
+<details>
+<summary>Show Code</summary>
+```{r load-data-code}
+#| code-summary: Show Code
+
+load_netflix_data <- function(){
+
+library(tidyverse)
+library(rvest)
+library(readxl)
+library(fs)
+
+data_dir <- path("data", "mp01")
+    
+  if(!dir_exists(data_dir)){
+    dir_create(data_dir, showWarnings=FALSE, recurse=TRUE)
+  }
+  
+  NETFLIX_URLS <- list(
+    `2023H1` = "https://about.netflix.com/news/what-we-watched-a-netflix-engagement-report",
+    `2023H2` = "https://about.netflix.com/news/what-we-watched-the-second-half-of-2023",
+    `2024H1` = "https://about.netflix.com/news/what-we-watched-the-first-half-of-2024",
+    `2024H2` = "https://about.netflix.com/news/what-we-watched-the-second-half-of-2024",
+    `2025H1` = "https://about.netflix.com/news/what-we-watched-the-first-half-of-2025",
+    `2025H2` = "https://about.netflix.com/news/what-we-watched-the-second-half-of-2025",
+    `2026H1` = "https://about.netflix.com/news/what-we-watched-the-first-half-of-2026"
+  )
+  
+  download_if_needed <- function(url, local){
+    if(!file_exists(local)){
+      download.file(url, local, quiet = TRUE, mode = "wb")
+    }
+    
+    return(local)
+  }
+    
+  NETFLIX_URLS |> 
+    map(read_html) |> 
+    map(html_element, xpath = "//a[contains(@href, '.xlsx')]") |> 
+    map_chr(html_attr, "href") |> 
+    enframe("period", "url") |> 
+   mutate(path = path(data_dir, paste0(period, ".xlsx")), 
+          path = map2(url, path, download_if_needed), 
+          data = map(path, read_excel, skip=3, na="*"), 
+          data = map(data, \(x) x |> mutate(`Release Date` = as.Date(`Release Date`)))) |>
+    unnest(data) |> 
+    select(-url, -path) |> 
+    mutate(year=str_sub(period, 1, 4), 
+           half=str_sub(period, start=6), 
+           period_start = make_date(year, if_else(half==1, 1, 7), 1), 
+           period_end = make_date(year, if_else(half==1, 7, 12), if_else(half==1, 30, 31))) |> 
+    filter(!is.na(`Hours Viewed`)) |> 
+    mutate(live_event = !is.na(Runtime) & str_detect(Runtime, "\\d+:\\d+\\*"), 
+           clean_time = str_remove(Runtime, fixed("*")),
+           Runtime = 60 * hour(hm(clean_time)) + minute(hm(clean_time))) |>
+    select(-clean_time) |>
+    mutate(Runtime = coalesce(Runtime, mean(Runtime, na.rm=TRUE)), 
+           .by=Title, 
+           Title = stringi::stri_trans_general(Title, "Latin-ASCII"),
+           Title = str_remove(Title, " // .*"), 
+           Title = str_remove(Title, "[^[:ascii:]].*"), 
+           Title = str_trim(Title)) |>
+    filter_out(Title == "") |>
+    select(year, 
+           period, 
+           period_start, 
+           period_end, 
+           Title, 
+           -half, 
+           Runtime, 
+           Views, 
+           `Hours Viewed`, 
+           `Release Date`,
+           `Available Globally?`, 
+           live_event)
+}
+  
+NETFLIX_DATA <- load_netflix_data()
+
+```
+</details>
+
+<details>
+<summary>Show Output</summary>
+```{r load-data-output}
+#| code-summary: Show Output
+#| echo: false
+
+head(NETFLIX_DATA)
+```
+</details>
+
+
+
+Step 2. Data Cleaning
+---------------------
+
+We perform some data cleaning for clarity in later analysis. We use the `rename()` function from the dplyr package to standardize the column names, the `as.integer()` function to change the year column fro character to integer, and the `mutate()` function to change the global availability column from character to logical.
+
+```{r clean-data-input}
+#| include: false
+
+library(tidyverse)
+
+#Changing Column Names
+NETFLIX_DATA <- NETFLIX_DATA |>
+  rename(title = 'Title',
+         runtime = 'Runtime',
+         views = 'Views',
+         hours_viewed = 'Hours Viewed',
+         release_date = 'Release Date',
+         available_globally = 'Available Globally?') |>
+  mutate(year = as.integer(year),
+         available_globally = available_globally == 'Yes')
+
+
+```
+
+<details>
+<summary>Show Code</summary>
+```{r clean-data-code}
+#| echo: true
+#| eval: false
+
+library(tidyverse)
+
+#Changing Column Names
+NETFLIX_DATA <- NETFLIX_DATA |>
+  rename(title = 'Title',
+         runtime = 'Runtime',
+         views = 'Views',
+         hours_viewed = 'Hours Viewed',
+         release_date = 'Release Date',
+         available_globally = 'Available Globally?') |>
+  mutate(year = as.integer(year),
+         available_globally = available_globally == 'Yes')
+``` 
+</details>
+
+<details>
+<summary>Show Output</summary>
+```{r clean-data-output}
+#| code-fold: true
+#| code-summary: Show Output
+head(NETFLIX_DATA)
+```
+</details>
+
+Step 3. Exploratory Data Analysis
+---------------------------------
+
+We will now answer a few exploratory data analysis questions.
+
+*What date range is covered by this data set?*
+
+```{r}
+
+daterange <- NETFLIX_DATA |>
+  
+
+
+```
+
+*How many different shows and movies are covered in this data set?*
+
+```{r}
+
+```
+
+*How many total hours have been spent watching shows from the Bridgerton universe?*
+
+```{r}
+
+```
+
+*How many total hours have been spent watching the five seasons of Stranger Things?*
+
+```{r}
+
+```
+
+*What percentage of total watch time was spent on the Top 10 titles of 2026H1?*
+
+```{r}
+
+```
+
+*What fraction of Netflix’s catalog is globally available?*
+
+```{r}
+
+```
+
+Step 4. Deeper Analysis
+-----------------------
+
+This section will cover a range of deeper question that will lead to more relevant insights than the basic questions covered in the previous section.
+
+*What was the top title (by total hours viewed) in each period and what fraction of total viewership did it capture?*
+
+```{r}
+
+```
+
+*How has Netflix’s catalog changed in size over the periods for which we have questions? You should consider both the number of titles and the total runtime of content.*
+
+```{r}
+
+```
+
+*Which titles have had the most consistently high viewership across all periods?* 
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
+
+
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+::: {.callout-note title="AI Usage Statement" collapse="true"}
+
+GitHub Co-Pilot Pro was used via RStudio integration while completing this project. No other generative AI tools were used.
+
+:::
