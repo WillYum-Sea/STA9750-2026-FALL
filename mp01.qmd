@@ -2,6 +2,7 @@
 title: "mp01 Placeholder"
 format:
   html:
+    toc: true
     code-tools:
       toggle: true
       source: repo
@@ -118,8 +119,10 @@ NETFLIX_DATA <- load_netflix_data()
 dplyr::glimpse(NETFLIX_DATA)
 
 ```
-We can see that loading the dataset works, but the column names and datatypes aren't exactly perfect. Let's do some cleaning.
 
+::: {.callout-note appearance = "simple" icon=false}
+We can see that loading the dataset works, but the column names and datatypes aren't exactly perfect. Let's do some cleaning.
+:::
 Step 2. Data Cleaning
 ---------------------
 
@@ -143,22 +146,24 @@ NETFLIX_DATA <- NETFLIX_DATA |>
          available_globally = available_globally == 'Yes')
 
 ```
+::: {.callout-note appearance = "simple" icon=false}
 Now that we've performed those operations, lets check on the data using `glimpse()`.
-
+:::
 ```{r data-check1}
 #| code-fold: show
 dplyr::glimpse(NETFLIX_DATA)
 ```
+::: {.callout-note appearance = "simple" icon=false}
 As we can see from this output, the column names are standardized and readable. The columns are also the correct data types for future analysis. Lets use the `skim()` function from the skimr package to get some stats and view the shape of our data.
-
+:::
 ```{r data-check2-code}
 #| code-fold: show
 library(skimr)
 skim(NETFLIX_DATA)
 ```
-
+::: {.callout-note appearance = "simple" icon=false}
 Now that we have a good idea of what our data looks like, we can catch any quirks it may have. This analysis has a rather small scope, so data limitations aren't a huge concern, but it's always important to keep track of things like missing values that aren't always visible from just running `head()`.
-
+:::
 ```{r skim-insights}
 #| code-fold: show
 release_nas <- skim(NETFLIX_DATA)|>
@@ -174,34 +179,39 @@ runtime_nas <- skim(NETFLIX_DATA)|>
   pull(n_missing)
 
 ```
-
+::: {.callout-note appearance = "simple" icon=false}
 For example, in some analyses, it my be important to note that the 'release' column has `{r} release_nas` NAs, the 'runtime' column has `{r} runtime_nas` NAs, and the 'views' column has `{r} views_nas` NAs. We'll be dropping NAs for the rest of this analysis though.
 
 Now that we have some tidier data, we will answer a few exploratory data analysis questions.
-
+:::
 Step 3. Exploratory Data Analysis
 ---------------------------------
-
+<div class="question-header">
 *What date range is covered by this data set?*
+</div>
 
 ```{r date-range}
 #| code-fold: show
 date_range <- range(NETFLIX_DATA$release_date, na.rm=TRUE)
 print(date_range)
 ```
+::: {.callout-note appearance = "simple" icon=false}
 We can see that out data extends from `r date_range[1]` to `r date_range[2]`.
-
+:::
+<div class="question-header">
 *How many different shows and movies are covered in this data set?*
-
+</div>
 ```{r total-shows}
 #| code-fold: show
 length(NETFLIX_DATA$title)
 length(unique(NETFLIX_DATA$title))
 ```
+::: {.callout-note appearance = "simple" icon=false}
 It's interesting to see that this dataset has a total of `{r} length(NETFLIX_DATA$title)` rows, but only `{r} length(unique(NETFLIX_DATA$title))` different shows.
-
-
+:::
+<div class="question-header">
 *How many total hours have been spent watching shows from the Bridgerton universe?*
+</div>
 
 ```{r bridgerton-hours}
 #| code-fold: show
@@ -212,10 +222,12 @@ bridgerton_hours <- NETFLIX_DATA |>
 sum(bridgerton_hours)
 
 ```
-Here, we filter the data so only rows containing the phrase "Bridgerton" appear. When we add up the total 'hours_viewed' column, we get `{r} sum(bridgerton_hours)`.
-
+::: {.callout-note appearance = "simple" icon=false}
+Here, we filter the data so only rows containing the phrase "Bridgerton" appear. When we add up the total 'hours_viewed' column, we get `{r} format(sum(bridgerton_hours), scientific=FALSE, big.mark=",")`.
+:::
+<div class="question-header">
 *How many total hours have been spent watching the five seasons of Stranger Things?*
-
+</div>
 ```{r stranger-things-watchtime}
 #| code-fold: show
 stranger_things_hours <- NETFLIX_DATA |>
@@ -228,14 +240,16 @@ stranger_things_hours <- NETFLIX_DATA |>
 
 sum(stranger_things_hours)
 ```
-This question is a little different because it only includes hours from the 5 seasons -- not the whole Stranger Things universe. To find the answer, we create a list of the individual titles of these season instead of just detecting 'Stranger Things.' By doing this, we find that a total of `{r} sum(stranger_things_hours)` hours have been spent watching the original 5 seasons.
-
+::: {.callout-note appearance = "simple" icon=false}
+This question is a little different because it only includes hours from the 5 seasons -- not the whole Stranger Things universe. To find the answer, we create a list of the individual titles of these season instead of just detecting 'Stranger Things.' By doing this, we find that a total of `{r} format(sum(stranger_things_hours),scientific=FALSE, big.mark = ",")` hours have been spent watching the original 5 seasons.
+:::
 ::: {.callout-warning title = "Warning for More Complex Tasks" collapse = "true"}
 It's important to note that simply listing titles only works for this problem because we know there are only 5 items. In bigger analyses, we would use `filter()` and `filter_out()` to reduce the rows down to what we need -- not list every element we are looking for.
 :::
 
-
+<div class="question-header">
 *What percentage of total watch time was spent on the Top 10 titles of 2026H1?*
+</div>
 
 ```{r top-10-watchtime}
 #| code-fold: show
@@ -251,11 +265,12 @@ top10_percent <- top10_watchtime/total_watchtime
 top10_percent
 
 ```
-Although we can see that the top 10 shows were watched for a cumulative `{r} format(top10_watchtime/24, scientific=FALSE)` days, this only made up ~`{r} signif(top10_percent * 100, 3)`% of the total watch time on Netflix.
-
-
+::: {.callout-note appearance = "simple" icon=false}
+Although we can see that the top 10 shows were watched for a cumulative `{r} format(top10_watchtime/24, scientific=FALSE, big.mark = ",")` days, this only made up ~`{r} signif(top10_percent * 100, 3)`% of the total watch time on Netflix.
+:::
+<div class="question-header">
 *What fraction of Netflix’s catalog is globally available?*
-
+</div>
 ```{r global-availability-percent}
 #| code-fold: show
 ga_titles <- NETFLIX_DATA |>
@@ -265,16 +280,18 @@ ga_percent <- length(ga_titles$available_globally)/length(NETFLIX_DATA$available
 print(ga_percent)
 
 ```
+::: {.callout-note appearance = "simple" icon=false}
 After filtering titles that are not globally available, we find that `{r} signif(ga_percent, 4)*100`% of all Netflix titles are globally available. 
-
-
+:::
 
 Step 4. Deeper Analysis
 -----------------------
 
 This section will cover a range of deeper question that will lead to more relevant insights than the basic questions covered in the previous section.
 
+<div class="question-header">
 *What was the top title (by total hours viewed) in each period and what fraction of total viewership did it capture?*
+</div>
 
 ```{r viewership-percent-by-period}
 #| code-fold: show
@@ -313,9 +330,13 @@ max_percent <- max(top_titles$period_hours_fraction)
 
 top_titles_table
 ```
+::: {.callout-note appearance = "simple" icon=false}
  We can see that the most concentrated viewership comes from "Wednesday: Season 2" in the second half of 2025, but it only captured `{r} signif(max_percent,4)*100`% of the total viewership during its release period. From this, we can tell that audiences' interests were diversified throughout these time frames, and that no major blockbusters or big releases made a significant impact on a single title's viewership share.
- 
+:::
+ <div class="question-header">
 *How has Netflix’s catalog changed in size over the periods for which we have questions?*
+</div>
+
 ```{r catalog-over-time}
 #| code-fold: show
 library(gt)
@@ -363,12 +384,17 @@ catalog_data |>
   )
 
 ```
-As we can see, the first row is empty, as we have no data prior to the first half of 2023 that we can compare to. However, we can see that in 2023, there was a big drop in viewership of `{r} format(-catalog_data$hours_change[2], scientific=FALSE)` hours, and lost `{r} format(-catalog_data$titles_change[2], scientific=FALSE)` titles from their catalog. After some brief research, we can find that a variety of factors contributed to this: the Hollywood actors' strike, the introduction of a new tiered subscription system, and a slew of expiring licensing contracts. All of these contributed to Netflix losing access to popular titles and releasing less original content. Consequently, people just stopped spending as much time on Netflix than in previous time periods. Following these poorly performing 6 months, we can see that they stabilized with new original content and licensed titles, contributing to a steady growth in viewership hours afterwards.
 
 
-*Which titles have had the most consistently high viewership across all periods?* 
+::: {.callout-note appearance = "simple" icon=false}
+As we can see, the first row is empty, as we have no data prior to the first half of 2023 that we can compare to. However, we can see that in 2023, there was a big drop in viewership of `{r} format(-catalog_data$hours_change[2], scientific=FALSE, big.mark = ",")` hours, and lost `{r} format(-catalog_data$titles_change[2], scientific=FALSE, big.mark = ",")` titles from their catalog. After some brief research, we can find that a variety of factors contributed to this: the Hollywood actors' strike, the introduction of a new tiered subscription system, and a slew of expiring licensing contracts. All of these contributed to Netflix losing access to popular titles and releasing less original content. Consequently, people just stopped spending as much time on Netflix than in previous time periods. Following these poorly performing 6 months, we can see that they stabilized with new original content and licensed titles, contributing to a steady growth in viewership hours afterwards.
+:::
+<div class="question-header">
+*Which titles have had the most consistently high viewership across all periods?*
+</div>
 
 ```{r viewership-consistency]}
+#| code-fold: show
 
 #Calculating the mean viewership of all Netflix programming to determine what shows are valid for this prompt (i.e., shows in the 90th percentile or higher of total viewership)
 quantile_viewership <- quantile(NETFLIX_DATA$views, 0.90, na.rm = TRUE)
@@ -421,12 +447,16 @@ title_stats |>
     everything()
   )
 ```
+::: {.callout-note appearance = "simple" icon=false}
 To answer this question, we are comparing 'Coefficient of Variation,' which is defined as `sd(x)/mean(x)`. We are using this measure because it accounts for both the variation of viewership throughout the periods as compared to its total viewership; this gives a more fair assessment of 'consistency' because it accounts for the fact that shows with larger viewership will tend to have larger standard deviations. We will be assuming that 'consistent' also means the title is sufficiently large. To account for this, we use a set of titles that have been present for more than 4 periods and that are in at least the 90th percentile of total views. 
 
 With that in mind, this graph displays stats of titles with sufficiently high views and a low CV. We can see that are several seasons of Longmire, the second season of Velvet Coleccion, and the ninth season of Hubert und Staller; dramas in 3 different language make up half the list. 'Neon Genesis Evangelion' is a popular anime, 'Superstore' is a sitcom, and 'Upin and Ipin' is a children's show. All of these shows are something we could reasonably sit down, turn on the television, and watch leisurely. It is also worth noting that these IPs have all been on the platform longer than the parameter set in the analysis, suggesting that longer-running shows are worth investing in.
-
+:::
+<div class="question-header">
 *Within each period, what fraction of time was spent on ‘shows’ vs movies?*
+</div>
 ```{r shows-vs-movies}
+#| code-fold: show
 
 #creating a list of common title features of shows
 show_identifiers <- c(
@@ -495,11 +525,14 @@ gt_show_netflix |>
   )
 
 ```
+::: {.callout-note appearance = "simple" icon=false}
 We can see from this table that, after the second half of 2023, shows dominate the total number of hours on Netflix. 
-
-
+:::
+<div class="question-header">
 *How does the performance of live events compare to pre-taped content?*
-```{r}
+</div>
+```{r live-events}
+#| code-fold: show
 #Comparing aggregate average views between live and non-live events
 avg_views_by_live <- NETFLIX_DATA |> 
   group_by(live_event) |>
@@ -512,8 +545,16 @@ avg_views_by_live <- NETFLIX_DATA |>
 
 avg_views_by_live |>
   gt()
+```
+::: {.callout-note appearance = "simple" icon=false}
+We exclude 2023 from the tables because live content wasn't a feature until 
+2024. The first table suggests that, while live events are much less common, 
+they command a far greater average viewership than regularly streamed content.
 
-
+but...
+:::
+```{r live-events-2}
+#| code-fold: show
 #Diving into views by period between live and non-live events
 avg_views_by_live <- NETFLIX_DATA |> 
   filter_out(str_detect(period, '2023')) |>
@@ -544,19 +585,26 @@ ratio3 <- ratio1/ratio2
 avg_views_by_live |>
   gt()
 
+```
+
+```{r top-live-stat}
+#| include: false
 #Marking the top live performance
 top_live_performance <- NETFLIX_DATA |>
   filter(live_event == TRUE) |>
   slice_max(views, n=1)
 ```
-We exclude 2023 from the tables because live content wasn't a feature until 2024. The first table suggests that, while live events are much less common, they command a far greater average viewership than regularly streamed content. Upon further analysis though, we can that the second half of 2024 skews the data. With only 3 events, it brought in `{r} format(avg_views_by_live$avg_views[3], scientific=FALSE)` views. If we examine why, we'll find that
-the `{r} top_live_performance$title[1]` fight brought in `{r} format(top_live_performance$views[1], scientific=FALSE)` views -- significantly more than any other live event.
-
+::: {.callout-note appearance = "simple" icon=false}
+Upon further analysis though, we can that the second half of 2024 skews the 
+data. With only 3 events, it brought in `{r} format(avg_views_by_live$avg_views[3], scientific=FALSE, big.mark = ",")` views. If we examine why, we'll find that
+the `{r} top_live_performance$title[1]` fight brought in `{r} format(top_live_performance$views[1], scientific=FALSE, big.mark = ",")` views -- significantly more than any other live event.
+:::
 
 Strategy Memo
 --------------
 
-The following is an official memo with recommendations to Netflix upper management:
+The following is an official memo with recommendations to Netflix upper 
+management:
 
 
 :::{.memo}
@@ -574,30 +622,60 @@ The following is an official memo with recommendations to Netflix upper manageme
 Reflecting on the previously performed analysis, I recommend:
 
 
-1. Investing in licensing TV shows that could reasonably be broadcast on cable television
+1. Investing in licensing TV shows that could reasonably be broadcast on cable 
+television
 2.  Engaging with palatable, but quality content over experimental media
-3. Focusing on a larger quantity of shows rather than investing in highly anticipated titles
-4.  Choosing more methodically the live events to host, as they are more costly for a similar amount of views as normal streaming content
+3. Focusing on a larger quantity of shows rather than investing in highly
+anticipated titles
+4.  Choosing more methodically the live events to host, as they are more costly 
+for a similar amount of views as normal streaming content
 
 ### Catalog Makeup
-Netflix's viewing hours are highly skewed towards show since 2023. In the first half of 2023, watchers spent `{r} round(summary_shows$shows[1]*100, 2)`% of their time on shows rather than movies. As of the release of the 2026H1 data, that number stands at `{r} round(summary_shows$shows[7]*100, 2)`%. If we observe our most popular and consistently followed titles, we will see that people tend to rewatch shows, not movies.
+Netflix's viewing hours are highly skewed towards show since 2023. In the first 
+half of 2023, watchers spent `{r} round(summary_shows$shows[1]*100, 2)`% of 
+their time on shows rather than movies. As of the release of the 2026H1 data, 
+that number stands at `{r} round(summary_shows$shows[7]*100, 2)`%. If we observe
+our most popular and consistently followed titles, we will see that people tend
+to rewatch shows, not movies.
 
 ### Title Consistency
-Studying viewership in variance of sufficiently popular shows on Netflix reveals that the most consistent viewership comes from dramas, sitcoms, and children's shows that have, or could reasonably, appear on cable television. Of the top 10 most consistent shows (view analysis for details on that definition), all 10 are shows that have been available on Netflix for at least 2 years, often with several seasons. They only vary from a CV of `{r} round(title_stats$cv[1], 2)` to `{r} round(title_stats$cv[10], 2)`, meaning that there are no special cases here. A large factor in rewatches is palatability, not necessarily a flashy title.
+Studying viewership in variance of sufficiently popular shows on Netflix reveals
+that the most consistent viewership comes from dramas, sitcoms, and children's 
+shows that have, or could reasonably, appear on cable television. Of the top 10 
+most consistent shows (view analysis for details on that definition), all 10 are
+shows that have been available on Netflix for at least 2 years, often with 
+several seasons. They only vary from a CV of `{r} round(title_stats$cv[1], 2)` 
+to `{r} round(title_stats$cv[10], 2)`, meaning that there are no special cases 
+here. A large factor in rewatches is palatability, not necessarily a flashy 
+title.
 
 ### Viewership Concentration
-After analyzing viewership concentration across several reporting periods, it is clear that extremely popular titles only make up a small portion of our total viewership. The greatest viewership share we've had by hour is `{r} round(max_percent, 2)`% with 'Wednesday: Season 2.' If a highly anticipated title such as that cannot break into 2%, it would be my recommendation to invest in smaller titles.
+After analyzing viewership concentration across several reporting periods, it is
+clear that extremely popular titles only make up a small portion of our total 
+viewership. The greatest viewership share we've had by hour is 
+`{r} round(max_percent, 2)`% with 'Wednesday: Season 2.' If a highly 
+anticipated title such as that cannot break into 2%, it would be my 
+recommendation to invest in smaller titles.
 
 ### Live Broadcasting
-Live events have the potential to bring in spectacular viewership, but our average events often perform no better than our typical popular streaming content.Our `{r} format(top_live_performance$title[1], scientific=FALSE)` fight brought in `{r} format(top_live_performance$views[1], scientific=FALSE)` views, but our average live event only brings in `{r} round(ratio3, 2)`x the amount of views as normal programming, and for a much greater cost.
+Live events have the potential to bring in spectacular viewership, but our 
+average events often perform no better than our typical popular streaming 
+content.Our `{r} format(top_live_performance$title[1], scientific=FALSE, big.mark = ",")` fight 
+brought in `{r} format(top_live_performance$views[1], scientific=FALSE, big.mark = ",")` views, 
+but our average live event only brings in `{r} round(ratio3, 2)`x the amount of 
+views as normal programming, and for a much greater cost.
 
 ### Conclusion
-The results of these analyses suggest that the recommendations listed in the executive summary are sound, and further analysis could yield even more useful results. I suggest we continue drilling down with the same team to reveal further insight on these topics.
+The results of these analyses suggest that the recommendations listed in the 
+executive summary are sound, and further analysis could yield even more useful 
+results. I suggest we continue drilling down with the same team to reveal 
+further insight on these topics.
 
 :::
 
 ::: {.callout-note title="AI Usage Statement" collapse="true"}
 
-GitHub Co-Pilot Pro was used via RStudio integration while completing this project. No other generative AI tools were used.
+GitHub Co-Pilot Pro was used via RStudio integration while completing this 
+project. No other generative AI tools were used.
 
 :::

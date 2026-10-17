@@ -11,12 +11,14 @@ background-color: #d8b4fe;
 color: black;
 }
 
-/* Ensure Quarto content fills the page */
 #quarto-content {
 min-height: 100vh;
 }
 
-/* Sidebar */
+#quarto-content {
+  width: 95%;
+  max-width: none;
+}
 #quarto-sidebar {
 background-color: #ead7ff;
 }
@@ -71,7 +73,15 @@ color: #4c1d95;
 a:hover {
 color: #2e1065;
 }
-
+.question-header {
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #444;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
 .memo {
   background: white;
   padding: 2rem;
@@ -92,3 +102,16 @@ color: #2e1065;
   margin-bottom: 1rem;
   text-align: justify;
 }
+#TOC {
+  font-size: 2.5rem;
+}
+
+#TOC .toc-title {
+  font-size: 2.75rem;
+  font-weight: 800;
+}
+
+#TOC li {
+  margin-bottom: 0.3rem;
+}
+

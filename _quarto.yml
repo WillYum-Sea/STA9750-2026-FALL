@@ -43,6 +43,7 @@ website:
 
 format:
   html:
+    page-layout: full
     css: styles.css
     toc: false
 
