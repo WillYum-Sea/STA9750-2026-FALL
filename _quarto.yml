@@ -1,11 +1,14 @@
 project:
   type: website
   output-dir: docs
+execute:
+  cache: true
+  freeze: auto
 
 website:
   title: "Portfolio"
   description: Portfolio
-  site-url: "https://WillYum-Sea.github.io/STA9750-2026-FALL/"
+  repo-url: "https://WillYum-Sea.github.io/STA9750-2026-FALL/"
   
   sidebar:
     style: "docked"
