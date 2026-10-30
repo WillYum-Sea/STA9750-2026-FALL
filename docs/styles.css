@@ -7,7 +7,7 @@ margin: 0;
 
 /* Main page background */
 body {
-background-color: #d8b4fe;
+background-color: white;
 color: black;
 }
 
@@ -74,16 +74,21 @@ a:hover {
 color: #2e1065;
 }
 .question-header {
-  font-size: 0.95rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #444;
-  margin-top: 1.5rem;
-  margin-bottom: 0.5rem;
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: #1f2937;
+    
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.4rem;
+
+    border-bottom: 2px solid #d1d5db;
+
+    letter-spacing: 0.02em;
+    line-height: 1.4;
 }
 .memo {
-  background: white;
+  background: AliceBlue;
   padding: 2rem;
   margin: 2rem 0;
   max-width: 850px;

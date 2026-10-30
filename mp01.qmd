@@ -1,5 +1,5 @@
 ---
-title: "mp01 Placeholder"
+title: "What We Watched: Exploring Netflix Viewing Data"
 format:
   html:
     toc: true
@@ -8,9 +8,6 @@ format:
       source: repo
       caption: "Want to see the code or repository?"
 ---
-
-What We Watched: Exploring Netflix Viewing Data
-===============================================
 
 This project demonstrates the following:
   
@@ -49,6 +46,7 @@ library(readxl)
 library(fs)
 library(dplyr)
 library(skimr)
+library(gt)
 
 data_dir <- path("data", "mp01")
     
@@ -131,20 +129,21 @@ We'll use the `rename()` function from the dplyr package to standardize the colu
 ```{r clean-data-input}
 #| code-fold: show
 #| code-summary: "Show Code"
-
-library(tidyverse)
-
-#Changing column names and turning the 'years' category into integers
+#| 
+# Standardize column names and data types
 NETFLIX_DATA <- NETFLIX_DATA |>
-  rename(title = 'Title',
-         runtime = 'Runtime',
-         views = 'Views',
-         hours_viewed = 'Hours Viewed',
-         release_date = 'Release Date',
-         available_globally = 'Available Globally?') |>
-  mutate(year = as.integer(year),
-         available_globally = available_globally == 'Yes')
-
+  rename(
+    title = Title,
+    runtime = Runtime,
+    views = Views,
+    hours_viewed = `Hours Viewed`,
+    release_date = `Release Date`,
+    available_globally = `Available Globally?`
+  ) |>
+  mutate(
+    year = as.integer(year),
+    available_globally = available_globally == "Yes"
+  )
 ```
 ::: {.callout-note appearance = "simple" icon=false}
 Now that we've performed those operations, lets check on the data using `glimpse()`.
@@ -158,7 +157,7 @@ As we can see from this output, the column names are standardized and readable. 
 :::
 ```{r data-check2-code}
 #| code-fold: show
-library(skimr)
+
 skim(NETFLIX_DATA)
 ```
 ::: {.callout-note appearance = "simple" icon=false}
@@ -166,26 +165,41 @@ Now that we have a good idea of what our data looks like, we can catch any quirk
 :::
 ```{r skim-insights}
 #| code-fold: show
-release_nas <- skim(NETFLIX_DATA)|>
-  filter(skim_variable == "release_date") |>
-  pull(n_missing)
 
-runtime_nas <- skim(NETFLIX_DATA)|>
-  filter(skim_variable == "runtime") |>
-  pull(n_missing)
+missing_values <- skim(NETFLIX_DATA) |>
+  filter(
+    skim_variable %in% c(
+      "release_date",
+      "runtime",
+      "views"
+    )
+  ) |>
+  select(
+    Variable = skim_variable,
+    `Missing Values` = n_missing
+  )
 
- views_nas <- skim(NETFLIX_DATA)|>
-  filter(skim_variable == "views") |>
-  pull(n_missing)
+missing_values |>
+  gt() |>
+  tab_header(
+    title = "Missing Values Summary"
+  ) |>
+  cols_align(
+    align = "center",
+    columns = everything()
+  )
 
 ```
-::: {.callout-note appearance = "simple" icon=false}
-For example, in some analyses, it my be important to note that the 'release' column has `{r} release_nas` NAs, the 'runtime' column has `{r} runtime_nas` NAs, and the 'views' column has `{r} views_nas` NAs. We'll be dropping NAs for the rest of this analysis though.
 
-Now that we have some tidier data, we will answer a few exploratory data analysis questions.
+::: {.callout-note appearance = "simple" icon=false}
+The table above summarizes missing values in variables that may affect later analyses. While the number of missing observations is relatively small, it is important to be aware of these limitations when interpreting results. For the remainder of this report, analyses will use available observations and exclude missing values where necessary.
 :::
+
 Step 3. Exploratory Data Analysis
 ---------------------------------
+
+### Section 1. Date Range
+
 <div class="question-header">
 *What date range is covered by this data set?*
 </div>
@@ -193,22 +207,33 @@ Step 3. Exploratory Data Analysis
 ```{r date-range}
 #| code-fold: show
 date_range <- range(NETFLIX_DATA$release_date, na.rm=TRUE)
-print(date_range)
+
+date_range
 ```
 ::: {.callout-note appearance = "simple" icon=false}
 We can see that out data extends from `r date_range[1]` to `r date_range[2]`.
 :::
+### Section 2. Shows & Movies
+
 <div class="question-header">
 *How many different shows and movies are covered in this data set?*
 </div>
 ```{r total-shows}
 #| code-fold: show
-length(NETFLIX_DATA$title)
-length(unique(NETFLIX_DATA$title))
+total_rows <- nrow(NETFLIX_DATA)
+unique_titles <- n_distinct(NETFLIX_DATA$title)
+
+c(
+  Total_Rows = total_rows,
+  Unique_Titles = unique_titles
+)
 ```
 ::: {.callout-note appearance = "simple" icon=false}
-It's interesting to see that this dataset has a total of `{r} length(NETFLIX_DATA$title)` rows, but only `{r} length(unique(NETFLIX_DATA$title))` different shows.
+It's interesting to see that this dataset has a total of `{r} total_rows` rows, but only `{r} unique_titles` different shows.
 :::
+
+### Section 3. Bridgerton Universe
+
 <div class="question-header">
 *How many total hours have been spent watching shows from the Bridgerton universe?*
 </div>
@@ -216,36 +241,53 @@ It's interesting to see that this dataset has a total of `{r} length(NETFLIX_DAT
 ```{r bridgerton-hours}
 #| code-fold: show
 bridgerton_hours <- NETFLIX_DATA |>
-  filter(str_detect(title, 'Bridgerton'))|>
-  pull(hours_viewed)
+  filter(str_detect(title, "Bridgerton")) |>
+  summarize(
+    total_hours = sum(hours_viewed, na.rm = TRUE)
+  ) |>
+  pull(total_hours)
 
-sum(bridgerton_hours)
+bridgerton_hours
 
 ```
 ::: {.callout-note appearance = "simple" icon=false}
-Here, we filter the data so only rows containing the phrase "Bridgerton" appear. When we add up the total 'hours_viewed' column, we get `{r} format(sum(bridgerton_hours), scientific=FALSE, big.mark=",")`.
+Here, we filter the data so only rows containing the phrase "Bridgerton" appear. When we add up the total 'hours_viewed' column, we get `{r} format((bridgerton_hours), scientific=FALSE, big.mark=",")`.
 :::
+
+### Section 4. Stranger Things Seasons 1-5
+
 <div class="question-header">
 *How many total hours have been spent watching the five seasons of Stranger Things?*
 </div>
 ```{r stranger-things-watchtime}
 #| code-fold: show
-stranger_things_hours <- NETFLIX_DATA |>
-  filter(title %in% c('Stranger Things',
-                      'Stranger Things 2',
-                      'Stranger Things 3', 
-                      'Stranger things 4',
-                      'Stranger things 5'))|>
-  pull(hours_viewed)
+stranger_things_titles <- c(
+  "Stranger Things",
+  "Stranger Things 2",
+  "Stranger Things 3",
+  "Stranger Things 4",
+  "Stranger Things 5"
+)
 
-sum(stranger_things_hours)
+stranger_things_hours <- NETFLIX_DATA |>
+  filter(title %in% stranger_things_titles) |>
+  summarize(
+    total_hours = sum(hours_viewed, na.rm = TRUE)
+  ) |>
+  pull(total_hours)
+
+stranger_things_hours
 ```
 ::: {.callout-note appearance = "simple" icon=false}
-This question is a little different because it only includes hours from the 5 seasons -- not the whole Stranger Things universe. To find the answer, we create a list of the individual titles of these season instead of just detecting 'Stranger Things.' By doing this, we find that a total of `{r} format(sum(stranger_things_hours),scientific=FALSE, big.mark = ",")` hours have been spent watching the original 5 seasons.
+This question is a little different because it only includes hours from the 5 seasons -- not the whole Stranger Things universe. To find the answer, we create a list of the individual titles of these season instead of just detecting 'Stranger Things.' By doing this, we find that a total of `{r} format((stranger_things_hours), scientific=FALSE, big.mark = ",")` hours have been spent watching the original 5 seasons.
 :::
+
+
 ::: {.callout-warning title = "Warning for More Complex Tasks" collapse = "true"}
 It's important to note that simply listing titles only works for this problem because we know there are only 5 items. In bigger analyses, we would use `filter()` and `filter_out()` to reduce the rows down to what we need -- not list every element we are looking for.
 :::
+
+### Section 5. Top 10 Titles of the First Half of 2026
 
 <div class="question-header">
 *What percentage of total watch time was spent on the Top 10 titles of 2026H1?*
@@ -253,21 +295,29 @@ It's important to note that simply listing titles only works for this problem be
 
 ```{r top-10-watchtime}
 #| code-fold: show
-total_watchtime <- sum(NETFLIX_DATA$hours_viewed)
+period_data <- NETFLIX_DATA |>
+  filter(period == "2026H1")
 
-top10_data <- NETFLIX_DATA |>
-  arrange(desc(hours_viewed)) |>
-  slice_max(hours_viewed, n = 10)
+total_watchtime <- sum(period_data$hours_viewed)
 
-top10_watchtime <- sum(top10_data$hours_viewed)
+top10_watchtime <- period_data |>
+  slice_max(hours_viewed, n = 10) |>
+  summarize(
+    total_hours = sum(hours_viewed)
+  ) |>
+  pull(total_hours)
 
-top10_percent <- top10_watchtime/total_watchtime
+top10_percent <- top10_watchtime / total_watchtime
+
 top10_percent
 
 ```
 ::: {.callout-note appearance = "simple" icon=false}
-Although we can see that the top 10 shows were watched for a cumulative `{r} format(top10_watchtime/24, scientific=FALSE, big.mark = ",")` days, this only made up ~`{r} signif(top10_percent * 100, 3)`% of the total watch time on Netflix.
+Although we can see that the top 10 shows were watched for a cumulative `{r} format((top10_watchtime)/24, scientific=FALSE, big.mark = ",")` days, this only made up ~`{r} signif(top10_percent * 100, 3)`% of the total watch time on Netflix.
 :::
+
+### Section 6. Global Availability
+
 <div class="question-header">
 *What fraction of Netflix’s catalog is globally available?*
 </div>
@@ -289,106 +339,107 @@ Step 4. Deeper Analysis
 
 This section will cover a range of deeper question that will lead to more relevant insights than the basic questions covered in the previous section.
 
+### Section 1. Top Title by Period
+
 <div class="question-header">
 *What was the top title (by total hours viewed) in each period and what fraction of total viewership did it capture?*
 </div>
 
 ```{r viewership-percent-by-period}
 #| code-fold: show
-library(gt)
-library(dplyr)
 
-#filtering data to identify hours viewed in each period and the percentage of viewership each top title had
 top_titles <- NETFLIX_DATA |>
-  group_by(period) |>
-  mutate(total_period_hours = sum(hours_viewed)) |>
-  slice_max(hours_viewed,n = 1, with_ties = FALSE)|>
-  mutate(period_hours_fraction = hours_viewed/total_period_hours) |>
-  select(period,
-         title,
-         hours_viewed,
-         period_hours_fraction)|>
-  ungroup()
+  mutate(
+    total_period_hours = sum(hours_viewed),
+    .by = period
+  ) |>
+  slice_max(
+    hours_viewed,
+    n = 1,
+    with_ties = FALSE,
+    by = period
+  ) |>
+  mutate(
+    period_hours_fraction = hours_viewed / total_period_hours
+  ) |>
+  select(
+    period,
+    title,
+    hours_viewed,
+    period_hours_fraction
+  )
 
-#creating the gt() object and formatting
-top_titles_table <- top_titles |>
+max_percent <- max(top_titles$period_hours_fraction)
+
+top_titles |>
   gt() |>
-  tab_header(title = "Top Viewership by Period") |>
-  cols_align(align = 'center',
-             columns = everything())|>
-  cols_width(everything() ~ px(200))|>
+  tab_header(
+    title = "Top Viewership by Period"
+  ) |>
   cols_label(
     period = md("**Period**"),
     title = md("**Title**"),
     hours_viewed = md("**Total Hours Viewed**"),
-    period_hours_fraction = md("**% of Total Viewership**")) |>
-  fmt_percent(columns = period_hours_fraction, decimals = 2) |>
-  fmt_number(columns = hours_viewed, sep_mark = ',')
-
-#for use in explanation
-max_percent <- max(top_titles$period_hours_fraction)
-
-top_titles_table
+    period_hours_fraction = md("**% of Total Viewership**")
+  ) |>
+  fmt_number(hours_viewed, sep_mark = ",") |>
+  fmt_percent(period_hours_fraction, decimals = 2)
 ```
+
 ::: {.callout-note appearance = "simple" icon=false}
  We can see that the most concentrated viewership comes from "Wednesday: Season 2" in the second half of 2025, but it only captured `{r} signif(max_percent,4)*100`% of the total viewership during its release period. From this, we can tell that audiences' interests were diversified throughout these time frames, and that no major blockbusters or big releases made a significant impact on a single title's viewership share.
 :::
+
+### Section 2. Catalog Size Over Time
+
  <div class="question-header">
 *How has Netflix’s catalog changed in size over the periods for which we have questions?*
 </div>
 
 ```{r catalog-over-time}
 #| code-fold: show
-library(gt)
-library(dplyr)
-
-#arranging data into groups and calculating total hours and titles by period
 catalog_data <- NETFLIX_DATA |>
-  group_by(period) |>
-  arrange(period) |>
   summarize(
-        period_hours = sum(hours_viewed),
-        period_titles = n_distinct(title)) |>
+    period_hours = sum(hours_viewed),
+    period_titles = n_distinct(title),
+    .by = period
+  ) |>
+  arrange(period) |>
   mutate(
-        hours_change = period_hours - lag(period_hours),
-        titles_change = period_titles - lag(period_titles),
-        hours_change_percent = hours_change/lag(period_hours),
-        titles_change_percent = titles_change/lag(period_titles)) |>
-  select(period,
-         hours_change,
-         titles_change,
-         titles_change_percent,
-         hours_change_percent) |>
-  ungroup()
+    hours_change = period_hours - lag(period_hours),
+    titles_change = period_titles - lag(period_titles),
+    hours_change_percent = hours_change / lag(period_hours),
+    titles_change_percent = titles_change / lag(period_titles)
+  )
 
-#making gt object and formatting
 catalog_data |>
+  select(
+    period,
+    hours_change,
+    titles_change,
+    titles_change_percent,
+    hours_change_percent
+  ) |>
   gt() |>
   fmt_number(
-    columns = c( 
-                hours_change, 
-                titles_change))|> 
+    c(hours_change, titles_change)
+  ) |>
   fmt_percent(
-    columns = c(
-                hours_change_percent, 
-                titles_change_percent)) |>
+    c(hours_change_percent, titles_change_percent)
+  ) |>
   sub_missing(
-    columns = everything(),
-    missing_text = "-") |>
-  cols_label(
-    period = md("**Period**"),
-    hours_change = md("**Change in Viewership Hours**"),
-    titles_change = md("**Change in Total Titles**"),
-    titles_change_percent = md("**% Change in Total Titles**"),
-    hours_change_percent = md("**% Change in Viewership Hours**")
+    everything(),
+    missing_text = "-"
   )
 
 ```
 
-
 ::: {.callout-note appearance = "simple" icon=false}
 As we can see, the first row is empty, as we have no data prior to the first half of 2023 that we can compare to. However, we can see that in 2023, there was a big drop in viewership of `{r} format(-catalog_data$hours_change[2], scientific=FALSE, big.mark = ",")` hours, and lost `{r} format(-catalog_data$titles_change[2], scientific=FALSE, big.mark = ",")` titles from their catalog. After some brief research, we can find that a variety of factors contributed to this: the Hollywood actors' strike, the introduction of a new tiered subscription system, and a slew of expiring licensing contracts. All of these contributed to Netflix losing access to popular titles and releasing less original content. Consequently, people just stopped spending as much time on Netflix than in previous time periods. Following these poorly performing 6 months, we can see that they stabilized with new original content and licensed titles, contributing to a steady growth in viewership hours afterwards.
 :::
+
+### Section 3. Consistent Viewership
+
 <div class="question-header">
 *Which titles have had the most consistently high viewership across all periods?*
 </div>
@@ -396,62 +447,78 @@ As we can see, the first row is empty, as we have no data prior to the first hal
 ```{r viewership-consistency]}
 #| code-fold: show
 
-#Calculating the mean viewership of all Netflix programming to determine what shows are valid for this prompt (i.e., shows in the 90th percentile or higher of total viewership)
-quantile_viewership <- quantile(NETFLIX_DATA$views, 0.90, na.rm = TRUE)
+# Define "high-viewership" titles as those in the top 10%
+# of total hours viewed across all periods
 
 title_stats <- NETFLIX_DATA |>
   arrange(title, period) |>
   group_by(title) |>
-  mutate(change = abs(hours_viewed - lag(hours_viewed)),
-         total_hours = sum(hours_viewed, na.rm = TRUE)) |>
   summarise(
-    avg_change = mean(change, na.rm = TRUE),
-    n_periods = n_distinct(period),
-    sd_hours = sd(hours_viewed),
-    total_hours = sum(hours_viewed),
-    min_views = min(hours_viewed),
-    max_views = max(hours_viewed),
-    cv = sd_hours/mean(hours_viewed)
-   ) |>
-    filter(n_periods >= 4,
-           avg_change != 0,
-           total_hours > quantile_viewership) |>
-  select(title, n_periods, sd_hours, total_hours, cv) |>
-  slice_min(cv, n=10)
+    periods_present = n_distinct(period),
+    total_hours = sum(hours_viewed, na.rm = TRUE),
+    mean_hours = mean(hours_viewed, na.rm = TRUE),
+    sd_hours = sd(hours_viewed, na.rm = TRUE),
+    cv = sd_hours / mean_hours,
+    .groups = "drop"
+  )
 
+# Calculate top-10% threshold based on TOTAL hours
+hours_threshold <- quantile(
+  title_stats$total_hours,
+  0.90,
+  na.rm = TRUE
+)
+
+title_stats <- title_stats |>
+  filter(
+    periods_present >= 4,
+    total_hours >= hours_threshold
+  ) |>
+  arrange(cv) |>
+  mutate(rank = row_number()) |>
+  slice_head(n = 10) |>
+  select(
+    rank,
+    title,
+    periods_present,
+    total_hours,
+    sd_hours,
+    cv
+  )
 
 title_stats |>
   gt() |>
-    cols_label(
+  tab_header(
+    title = "Most Consistently Viewed High-Performing Titles",
+    subtitle = "Titles appearing in at least four reporting periods and within the top 10% of total hours viewed"
+  ) |>
+  cols_label(
+    rank = md("**Rank**"),
     title = md("**Title**"),
-    n_periods = md("**# of Periods**"),
-    total_hours = md("**Hours Watched**"),
+    periods_present = md("**Periods Present**"),
+    total_hours = md("**Total Hours Viewed**"),
     sd_hours = md("**Standard Deviation**"),
     cv = md("**Coefficient of Variation**")
-    ) |>
+  ) |>
   fmt_number(
-    c(n_periods, total_hours, sd_hours),
+    columns = c(total_hours, sd_hours),
     sep_mark = ",",
-    decimal = 0
-  )|>
+    decimals = 0
+  ) |>
   fmt_number(
-    cv,
-    decimal = 4
-  ) |>
-  cols_width(
-    c(n_periods, total_hours, sd_hours, cv) ~px(150),
-    title ~px(275)
-  ) |>
-  cols_align(
-    align = "center",
-    everything()
+    columns = cv,
+    decimals = 4
   )
 ```
+
 ::: {.callout-note appearance = "simple" icon=false}
 To answer this question, we are comparing 'Coefficient of Variation,' which is defined as `sd(x)/mean(x)`. We are using this measure because it accounts for both the variation of viewership throughout the periods as compared to its total viewership; this gives a more fair assessment of 'consistency' because it accounts for the fact that shows with larger viewership will tend to have larger standard deviations. We will be assuming that 'consistent' also means the title is sufficiently large. To account for this, we use a set of titles that have been present for more than 4 periods and that are in at least the 90th percentile of total views. 
 
-With that in mind, this graph displays stats of titles with sufficiently high views and a low CV. We can see that are several seasons of Longmire, the second season of Velvet Coleccion, and the ninth season of Hubert und Staller; dramas in 3 different language make up half the list. 'Neon Genesis Evangelion' is a popular anime, 'Superstore' is a sitcom, and 'Upin and Ipin' is a children's show. All of these shows are something we could reasonably sit down, turn on the television, and watch leisurely. It is also worth noting that these IPs have all been on the platform longer than the parameter set in the analysis, suggesting that longer-running shows are worth investing in.
+With that in mind, this graph displays stats of titles with sufficiently high views and a low CV. 'Neon Genesis Evangelion' and 'The Seven Deadly Sins' are popular animes, 'Superstore' is a sitcom, 'Bojack Horseman' is a animated series, and The Last Empress is a K-Drama. All of these shows are something we could reasonably sit down, turn on the television, and watch leisurely. It is also worth noting that these IPs have all been on the platform longer than the parameter set in the analysis, suggesting that longer-running shows are worth investing in.
 :::
+
+### Section 4. Shows vs Movies
+
 <div class="question-header">
 *Within each period, what fraction of time was spent on ‘shows’ vs movies?*
 </div>
@@ -459,131 +526,177 @@ With that in mind, this graph displays stats of titles with sufficiently high vi
 #| code-fold: show
 
 #creating a list of common title features of shows
-show_identifiers <- c(
-"Season [1-9]+",
-"Series",
-"Limited Series",
-"Part 1 [0-9]+",
-"Volume [0-9]+",
-"Episode [0-9]+",
-"Episodes",
-"Chapter"
+show_identifiers <- regex(
+  paste(
+    c(
+      "Season [1-9]+",
+      "Series",
+      "Limited Series",
+      "Part [0-9]+",
+      "Volume [0-9]+",
+      "Episode [0-9]+",
+      "Episodes",
+      "Chapter"
+    ),
+    collapse = "|"
+  ),
+  ignore_case = TRUE
 )
 
-#making it not case-sensitive
-identifiers<- regex(
-    paste(show_identifiers, collapse = "|"),
-    ignore_case = TRUE
-  )
-
-#Creating new column in NETFLIX_DATA to identify shows by common title keywords
-netflix_data_with_shows <- NETFLIX_DATA |>
+summary_shows <- NETFLIX_DATA |>
   mutate(
     is_show = str_detect(
       title,
-      identifiers)
+      show_identifiers
     )
-
-#We can test our column here
-#slice_sample(netflix_data_with_shows, n=11)
-
-#Reducing columns to compare show vs. not-show hours by period
-gt_show_netflix <- netflix_data_with_shows |>
-  group_by(period, is_show) |>
-  summarize(
-    period_hours = sum(hours_viewed, na.rm=TRUE),
-    .groups = "drop"
   ) |>
-  group_by(period) |>
+  summarize(
+    period_hours = sum(hours_viewed),
+    .by = c(period, is_show)
+  ) |>
   mutate(
-    pct_hours = period_hours/sum(period_hours)
-    ) |>
+    pct_hours = period_hours / sum(period_hours),
+    .by = period
+  ) |>
   select(period, is_show, pct_hours) |>
   pivot_wider(
     names_from = is_show,
     values_from = pct_hours
   ) |>
-  ungroup()
-
-#renaming columns for summary
-summary_shows <- gt_show_netflix |>
   rename(
-        movies = `FALSE`,
-        shows = `TRUE`)
-    
-#creating gt object to display data
-gt_show_netflix |>
+    movies = `FALSE`,
+    shows = `TRUE`
+  )
+
+summary_shows |>
   gt() |>
-  tab_header(title = "Percent of Hours Spent on Shows vs. Movies") |>
+  tab_header(
+    title = "Share of Watch Time by Content Type",
+    subtitle = "Percentage of viewing hours spent on shows versus movies"
+  ) |>
   fmt_percent(
-    columns = c('FALSE', 'TRUE'),
+    columns = c(shows, movies),
     decimals = 2
   ) |>
   cols_label(
-    `FALSE` = "Movies",
-    `TRUE` = "Shows"
+    period = md("**Period**"),
+    shows = md("**Shows**"),
+    movies = md("**Movies**")
   )
 
 ```
+
 ::: {.callout-note appearance = "simple" icon=false}
 We can see from this table that, after the second half of 2023, shows dominate the total number of hours on Netflix. 
 :::
+
+### Section 5. Live Events
+
 <div class="question-header">
 *How does the performance of live events compare to pre-taped content?*
 </div>
 ```{r live-events}
 #| code-fold: show
 #Comparing aggregate average views between live and non-live events
-avg_views_by_live <- NETFLIX_DATA |> 
-  group_by(live_event) |>
+avg_views_by_live <- NETFLIX_DATA |>
   summarize(
-    number_of_titles = length(title),
+    number_of_titles = n(),
     total_views = sum(views, na.rm = TRUE),
-    avg_views = sum(views, na.rm = TRUE)/length(title),
-    .groups = 'drop'
+    avg_views = mean(views, na.rm = TRUE),
+    .by = live_event
   )
 
 avg_views_by_live |>
-  gt()
+  gt() |>
+  tab_header(
+    title = "Live Events vs. Traditional Programming",
+    subtitle = "Aggregate viewership performance"
+  ) |>
+  cols_label(
+    live_event = md("**Live Event**"),
+    number_of_titles = md("**Titles**"),
+    total_views = md("**Total Views**"),
+    avg_views = md("**Average Views per Title**")
+  ) |>
+  fmt_number(
+    columns = c(total_views, avg_views),
+    sep_mark = ",",
+    decimals = 0
+  ) |>
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) |>
+  text_transform(
+    locations = cells_body(columns = live_event),
+    fn = \(x) ifelse(x == "TRUE", "Yes", "No")
+  )
 ```
 ::: {.callout-note appearance = "simple" icon=false}
 We exclude 2023 from the tables because live content wasn't a feature until 
 2024. The first table suggests that, while live events are much less common, 
-they command a far greater average viewership than regularly streamed content.
+they command a greater average viewership than regularly streamed content.
 
 but...
 :::
 ```{r live-events-2}
 #| code-fold: show
 #Diving into views by period between live and non-live events
-avg_views_by_live <- NETFLIX_DATA |> 
-  filter_out(str_detect(period, '2023')) |>
-  group_by(period, live_event) |>
+avg_views_by_live <- NETFLIX_DATA |>
+  filter(!str_detect(period, "2023")) |>
   summarize(
-    number_of_titles = length(title),
+    number_of_titles = n(),
     total_views = sum(views, na.rm = TRUE),
-    avg_views = sum(views, na.rm = TRUE)/length(title),
-    .groups = 'drop'
+    avg_views = mean(views, na.rm = TRUE),
+    .by = c(period, live_event)
+  )
+#Table
+avg_views_by_live |>
+  gt() |>
+  tab_header(
+    title = "Live Events vs. Traditional Programming",
+    subtitle = "Aggregate viewership performance"
+  ) |>
+  cols_label(
+    period = md("**Period**"),
+    live_event = md("**Live Event**"),
+    number_of_titles = md("**Titles**"),
+    total_views = md("**Total Views**"),
+    avg_views = md("**Average Views per Title**")
+  ) |>
+  fmt_number(
+    columns = c(total_views, avg_views),
+    sep_mark = ",",
+    decimals = 0
+  ) |>
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) |>
+  text_transform(
+    locations = cells_body(columns = live_event),
+    fn = \(x) ifelse(x == "TRUE", "Yes", "No")
   )
 
 #for memo
-ratio1 <- NETFLIX_DATA |>
-  filter_out(title == "Jake Paul vs. Mike Tyson")|>
-  filter(live_event == TRUE) |>
+live_avg <- NETFLIX_DATA |>
+  filter(
+    live_event,
+    title != "Jake Paul vs. Mike Tyson"
+  ) |>
   summarize(
-  average_views = sum(views, na.rm = TRUE)/length(title)
-  )
+    avg = mean(views, na.rm = TRUE)
+  ) |>
+  pull(avg)
 
-ratio2 <- NETFLIX_DATA |>
-  filter(live_event == FALSE) |>
+normal_avg <- NETFLIX_DATA |>
+  filter(!live_event) |>
   summarize(
-  average_views = sum(views, na.rm = TRUE)/length(title)
-  )
+    avg = mean(views, na.rm = TRUE)
+  ) |>
+  pull(avg)
 
-ratio3 <- ratio1/ratio2
-
-avg_views_by_live |>
-  gt()
+ratio3 <- live_avg / normal_avg
 
 ```
 
@@ -591,8 +704,11 @@ avg_views_by_live |>
 #| include: false
 #Marking the top live performance
 top_live_performance <- NETFLIX_DATA |>
-  filter(live_event == TRUE) |>
-  slice_max(views, n=1)
+  filter(live_event) |>
+  slice_max(
+    views,
+    n = 1
+  )
 ```
 ::: {.callout-note appearance = "simple" icon=false}
 Upon further analysis though, we can that the second half of 2024 skews the 

@@ -26,7 +26,7 @@ website:
       - section: "Course Work"
         expanded: false
         contents:
-          - text: "Project 1"
+          - text: "Netflix Analysis"
             href: mp01.qmd
           
           - text: "Project 2"
