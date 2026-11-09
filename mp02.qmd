@@ -1,5 +1,1371 @@
 ---
-title: "mp02 Placeholder"
-format: html
+title: Environmentally Responsible US Transit Systems
+format:
+  html:
+    toc: true
+    code-tools:
+      toggle: true
+      source: repo
+      caption: "Want to see the code or repository?"
 ---
 
+Step 1. Data Collection
+-----------------------
+The following functions import the data that will be required in this analysis.
+
+This function pulls scrapes the html of the EIA State Electricity Profiles page for each state and extracts the relevant data from the table. It returns a data frame for each state with the following columns: state, abbreviation, CO2_MWh, primary_source, electricity_price_MWh, and generation_MWh. The function also caches the data in the data/mp02 directory to avoid repeated downloads.
+```{r data-electricty-report}
+#| code-fold: show
+#| results: hide
+#| cache: true
+#| warning: false
+#| error: false
+
+library(tidyverse)
+library(stringr)
+library(httr2)
+library(rvest)
+library(dplyr)
+library(gt)
+library(ggplot2)
+
+
+get_eia_sep <- function(state, abbr){
+    library(tidyverse)
+    library(stringr)
+    library(httr2)
+    library(rvest)
+    library(fs)
+  
+    state_formatted <- str_to_lower(state) |> str_replace_all("\\s", "")
+    
+    dir_name <- fs::path("data", "mp02")
+    file_name <- fs::path(dir_name, state_formatted)
+    
+    fs::dir_create(dir_name, recurse=TRUE)
+    
+    Sys.sleep(runif(1, 1, 1.5)) # Random delay between 1 and 1.5 seconds to avoid overwhelming the server
+    
+    if(!fs::file_exists(file_name)){
+        BASE_URL <- "https://www.eia.gov"
+        RESPONSE <- request(BASE_URL) |> 
+          req_url_path("electricity", 
+                       "state", 
+                       state_formatted) |>
+          req_headers(
+            `User-Agent` = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:149.0) Gecko/20100101 Firefox/149.0"
+            ) |>   
+          req_retry(
+                max_tries = 4, 
+          ) |>
+          req_perform(file_name)
+    
+        resp_check_status(RESPONSE)
+    }
+    
+    TABLE <- read_html(file_name) |> 
+        html_element("table") |> 
+        html_table() |>
+        mutate(Item = str_to_lower(Item))
+    
+    if("U.S. rank" %in% colnames(TABLE)){
+        TABLE <- TABLE |> rename(Rank = `U.S. rank`)
+    }
+    
+    CO2_MWh <- TABLE |> 
+        filter(Item == "carbon dioxide (lbs/mwh)") |>
+        pull(Value) |> 
+        str_replace_all(",", "") |>
+        as.numeric()
+    
+    PRIMARY <- TABLE |> 
+        filter(Item == "primary energy source") |> 
+        pull(Rank)
+    
+    RATE <- TABLE |>
+        filter(Item == "average retail price (cents/kwh)") |>
+        pull(Value) |>
+        as.numeric()
+    
+    GENERATION_MWh <- TABLE |>
+        filter(Item == "net generation (megawatthours)") |>
+        pull(Value) |>
+        str_replace_all(",", "") |>
+        as.numeric()
+    
+    data.frame(CO2_MWh               = CO2_MWh, 
+               primary_source        = PRIMARY,
+               electricity_price_MWh = RATE * 10, # / 100 cents to dollars &
+               # * 1000 kWh to MWH 
+               generation_MWh        = GENERATION_MWh, 
+               state                 = state, 
+               abbreviation          = abbr
+    )
+}
+
+EIA_SEP_REPORT <- map2(state.name, state.abb, get_eia_sep) |> list_rbind()
+  
+```
+
+This function, in less detail, pulls data from the NTD Energy Consumption table from the <a href="https://www.transit.dot.gov/ntd" target="_blank">
+FTA Website</a>. The function downloads the Excel file, reads it into R, and processes it to create a clean data frame with the relevant columns. It also caches the data in the data/mp02 directory to avoid repeated downloads.
+```{r data-energy-consumption}
+#| code-fold: show
+#| results: hide
+#| cache: true
+#| warning: false
+#| error: false
+
+
+load_ntd_energy <- function(){
+  library(readxl)
+  library(httr2)
+  library(tidyverse)
+  library(fs)
+  
+  # Create 'data/mp02' directory if not already present
+  DATA_DIR <- fs::path("data", "mp02")
+  fs::dir_create(DATA_DIR, recurse=TRUE)
+
+  NTD_ENERGY_FILE <- fs::path(DATA_DIR, "2025_ntd_energy.xlsx")
+
+  if(!fs::file_exists(NTD_ENERGY_FILE)){
+    library(httr2)
+  
+    request("https://www.transit.dot.gov/") |>
+      req_url_path("sites",
+                   "fta.dot.gov",
+                   "files",
+                   "2026-09",
+                   "2025 Energy Consumption_260806.xlsx") |> 
+      req_headers(
+        `User-Agent` = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:149.0) Gecko/20100101 Firefox/149.0") |> 
+      req_perform(NTD_ENERGY_FILE)
+  }
+  
+  if(file.info(NTD_ENERGY_FILE)$size < 1e4){
+        cat("I was unable to download the NTD Energy File. Please try again.\n")
+        stop("Download failed. Please delete the corrupted file by running `unlink('data/mp02/2025_ntd_energy.xlsx')` and try again.")
+    }
+
+  to_numeric_fill_0 <- function(x){
+    x <- if_else(x == "-", NA, x)
+    replace_na(as.numeric(x), 0)
+  }
+
+  read_excel(NTD_ENERGY_FILE) |> 
+    select(-c(`Reporter Type`, 
+              `Reporting Module`, 
+              `Gallons of Other Fuel`, 
+              `Other Fuel Description`)) |>
+    mutate(across(-c(`Agency Name`, 
+                     `Mode`,
+                     `TOS`), 
+                  to_numeric_fill_0)) |>
+    group_by(`NTD ID`, `Mode`, `Agency Name`) |>
+    summarize(across(where(is.numeric), sum), 
+              .groups = "keep") |>
+    mutate(ENERGY = sum(c_across(c(where(is.numeric))))) |>
+    filter(ENERGY > 0) |>
+    select(-ENERGY) |>
+    ungroup()
+}
+
+NTD_ENERGY <- load_ntd_energy()
+
+```
+
+This function pulls data from the NTD Service table from the U.S. Department of Transportation's [public data portal](https://data.transportation.gov/). The function downloads the CSV file, reads it into R, and processes it to create a clean data frame with the relevant columns. It also caches the data in the data/mp02 directory to avoid repeated downloads.
+```{r data-trasit-service}
+#| code-fold: show
+#| results: hide
+#| cache: true
+#| warning: false
+#| error: false
+
+load_ntd_service <- function(){
+  library(httr2)
+  library(tidyverse)
+  library(fs)
+  
+  # Create 'data/mp02' directory if not already present
+  DATA_DIR <- fs::path("data", "mp02")
+  fs::dir_create(DATA_DIR, recurse=TRUE)
+
+  NTD_SERVICE_FILE <- fs::path(DATA_DIR, "2025_ntd_service.csv")
+
+  if(!fs::file_exists(NTD_SERVICE_FILE)){
+    library(httr2)
+  
+    request("https://data.transportation.gov/resource/4fir-qbim.csv") |>
+      req_url_query(`$query`=paste(
+        "SELECT  `_5_digit_ntd_id` AS `nta_id`", 
+        "`max_agency` AS `agency`",
+        "`max_reporter_type` AS `reporter_type`",
+        "`max_organization_type` AS `organization_type`",
+        "`max_city` AS `city`",
+        "`max_state` AS `state`",
+        "`mode`",
+        "`max_mode_name`",      #for the join to recode mode names in data cleaning section
+        "`type_of_service`",
+        "`max_primary_uza_code` as `uza_code`",
+        "`max_primary_uza_name` as `uza_name`",
+        "`max_primary_uza_area_sq_miles` as `uza_sq_miles`",
+        "`max_primary_uza_population` as `uza_population`",
+        "`max_service_area_sq_miles` as `service_area_sq_miles`",
+        "`max_service_area_population` as `service_area_population`",
+        "`questionable_record` as `flagged_likely_inaccurate`",
+        "`sum_unlinked_passenger_trips_upt` as `total_upt`",
+        "`sum_passenger_miles` WHERE caseless_one_of(`report_year`, '2025') limit 50000", 
+        sep=",")) |>
+      req_headers(
+        `User-Agent` = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:149.0) Gecko/20100101 Firefox/149.0") |> 
+      req_perform(NTD_SERVICE_FILE)
+  }
+  
+  if(file.info(NTD_SERVICE_FILE)$size < 1e4){
+        cat("I was unable to download the NTD Service File. Please try again.\n")
+        stop("Download failed. Please delete the corrupted file by running `unlink('data/mp02/2025_ntd_service.xlsx')` and try again.")
+    }
+
+  read_csv(NTD_SERVICE_FILE) |>
+    mutate(flagged_likely_inaccurate = !is.na(flagged_likely_inaccurate))
+}
+
+NTD_SERVICE <- load_ntd_service()
+```
+
+The following pulls the data from the EIA CO2 Emissions Factors table from the 
+[EIA website](https://www.eia.gov/environment/emissions/co2_vol_mass.php). The function scrapes the HTML of the page and extracts the relevant data from the table. The function also caches the data in the data/mp02 directory to avoid repeated downloads. This will be used later in the analysis.
+```{r data-carbon-coefficients}
+#| code-fold: show
+#| results: hide
+#| cache: true
+#| warning: false
+#| error: false
+
+load_eia_co2_factors <- function() {
+
+  library(httr2)
+  library(rvest)
+  library(tidyverse)
+  library(fs)
+  library(stringr)
+
+  # Create data storage directory
+  DATA_DIR <- fs::path("data", "mp02")
+  fs::dir_create(DATA_DIR, recurse = TRUE)
+
+  # Local cache file
+  EIA_CO2_FILE <- fs::path(
+    DATA_DIR,
+    "2024_eia_co2_factors.csv"
+  )
+
+  # Download and process only if file does not exist
+  if (!fs::file_exists(EIA_CO2_FILE)) {
+
+    PAGE <- request(
+      "https://www.eia.gov/environment/emissions/co2_vol_mass.php"
+    ) |>
+      req_headers(
+        `User-Agent` =
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:149.0) Gecko/20100101 Firefox/149.0"
+      ) |>
+      req_perform() |>
+      resp_body_html()
+
+    # Extract first HTML table
+    CO2_TABLE <- PAGE |>
+      html_element("table") |>
+      html_table()
+
+    # Assign column names manually
+    names(CO2_TABLE) <- c(
+      "fuel",
+      "lb_co2_per_unit",
+      "kg_co2_per_unit",
+      "lb_co2_per_mmbtu",
+      "kg_co2_per_mmbtu"
+    )
+
+    # Remove category headings and footnotes
+    CO2_TABLE <- CO2_TABLE |>
+      filter(
+        !fuel %in% c(
+          "For homes and businesses",
+          "Other transportation fuels",
+          "Industrial fuels and others not listed above",
+          "Nonfuel uses",
+          "Coals by type",
+          "Other fuels"
+        )
+      ) |>
+      filter(
+        !str_detect(
+          fuel,
+          "^Data source:"
+        )
+      )
+
+    # Extract numeric values from columns that contain units
+    CO2_TABLE <- CO2_TABLE |>
+      mutate(
+        across(
+          -fuel,
+          ~ str_extract(
+            as.character(.x),
+            "[0-9,.]+"
+          )
+        )
+      ) |>
+      mutate(
+        across(
+          -fuel,
+          ~ as.numeric(
+            str_remove_all(.x, ",")
+          )
+        )
+      )
+
+    # Save cleaned table locally
+    write_csv(
+      CO2_TABLE,
+      EIA_CO2_FILE
+    )
+  }
+
+  # Verify successful download
+  if (file.info(EIA_CO2_FILE)$size < 100) {
+
+    cat(
+      "I was unable to download the EIA CO2 factors table.\n"
+    )
+
+    stop(
+      "Download failed. Delete the corrupted file with ",
+      "`unlink('data/mp02/eia_co2_factors.csv')` ",
+      "and try again."
+    )
+  }
+
+  # Read cleaned table
+  read_csv(
+    EIA_CO2_FILE,
+    show_col_types = FALSE
+  )
+}
+
+EIA_CO2_FACTORS <- load_eia_co2_factors()
+```
+
+Step 2. Data Cleaning and Merging
+---------------------------------
+Now that we have our data straight from the source, we can clean and merge the data to prepare it for analysis. We will join the NTD energy consumption data with the NTD service data, and then merge that with the EIA state electricity data. We also rename columns for readability and create a reference table to add transit mode names to the NTD data.
+
+```{r data-cleaning-merging}
+#| code-fold: show
+
+#renaming columns in the NTD energy data
+NTD_ENERGY <- NTD_ENERGY |>
+  rename(
+  'ntd_id'                          = 'NTD ID',
+  'mode'                            = 'Mode',
+  'agency'                          = 'Agency Name',
+  'gallons_biodiesel'               = 'Gallons of Bio-Diesel',
+  'biodiesel_description'           = 'Bio-Diesel Description',
+  'gallons_bunker_fuel'             = 'Gallons of Bunker Fuel',
+  'gallons_compressed_natural_gas'  = 'Gallons of Compressed Natural Gas',
+  'gallons_diesel_fuel'             = 'Gallons of Diesel Fuel',
+  'kwh_electric_battery'            = 'Kilowatt hours of Electric Battery',
+  'kwh_electric_propulsion'         = 'Kilowatt hours of Electric Propulsion',
+  'gallons_ethanol'                 = 'Gallons of Ethanol',
+  'gallons_gasoline'                = 'Gallons of Gasoline',
+  'kilograms_hydrogen'              = 'Kilograms of Hydrogen',
+  'gallons_kerosene'                = 'Gallons of Kerosene',
+  'gallons_liquified_nat_gas'       = 'Gallons of Liquified Nat Gas',
+  'gallons_liquified_petroleum_gas' = 'Gallons of Liquified Petroleum Gas'
+)
+#most columns are named appropriately for the NTD service data because of the query used to download the data
+NTD_SERVICE <- NTD_SERVICE |>
+  rename(
+  'agency'                          = 'AGENCY',
+  'ntd_id'                          = 'NTD_ID'
+)
+#setting NTD_SERVICE mode column data type to double for joining
+NTD_SERVICE <- NTD_SERVICE |>
+  mutate(
+    ntd_id = as.double(ntd_id)
+  )
+#creating database to add names to the transit codes
+MODE_LOOKUP <- tribble(
+  ~mode_code, ~mode_name,
+  "MB", "Bus",
+  "DR", "Demand Response",
+  "VP", "Vanpool",
+  "CB", "Commuter Bus",
+  "RB", "Bus Rapid Transit",
+  "TB", "Trolleybus",
+  "FB", "Ferryboat",
+  "CC", "Cable Car",
+  "MG", "Monorail/Automated Guideway",
+  "HR", "Heavy Rail",
+  "LR", "Light Rail",
+  "SR", "Streetcar Rail",
+  "CR", "Commuter Rail",
+  "YR", "Hybrid Rail",
+  "AR", "Alaska Railroad",
+  "IP", "Inclined Plane"
+)
+#join mode code reference table to the NTD energy and service data to add the mode names
+NTD_ENERGY <- NTD_ENERGY |>
+  left_join(MODE_LOOKUP, by = c("mode" = "mode_code"))|>
+  relocate(mode_name, .after = mode)
+
+NTD_SERVICE <- NTD_SERVICE |>
+  left_join(MODE_LOOKUP, by = c("mode" = "mode_code"))|>
+  relocate(mode_name, .after = mode)
+
+#generating a master table with columns from all three tables
+NTD_COMBINED <- NTD_ENERGY |>
+  left_join(NTD_SERVICE, by = c("ntd_id", "mode")) |>
+  left_join(EIA_SEP_REPORT, by = c("state" = "abbreviation")) 
+
+```
+
+Step: 3. Data Integration & Exploration
+---------------------------------------
+The following answers some basic questions about the data and provides some visualizations.
+
+### EIA State Electricity Profiles
+
+
+#### *Which 5 states have the most expensive retail electricity?*
+
+
+```{r ep-data-exploration-1}
+#| code-fold: show
+
+EIA_SEP_REPORT |>
+  arrange(desc(electricity_price_MWh)) |>
+  slice_head(n = 5) |>
+  mutate(
+    state = forcats::fct_reorder(
+      state,
+      electricity_price_MWh
+    )
+  ) |>
+  ggplot(
+    aes(
+      x = state,
+      y = electricity_price_MWh
+    )
+  ) +
+  geom_col(fill = "steelblue") +
+  geom_text(
+    aes(label = round(electricity_price_MWh, 1)),
+    hjust = -0.1,
+    size = 3
+  ) +
+  coord_flip() +
+  labs(
+    title = "Top 5 States by Retail Electricity Price",
+    subtitle = "EIA State Electricity Data",
+    x = NULL,
+    y = "Price ($/MWh)"
+  ) +
+  theme_minimal()
+
+```
+This graph displays the top 5 states with the most C02/MWh of electricity generated. Also included are their primary energy sources and total MWh generations for context.
+
+#### *Which 5 states have the ‘dirtiest’ electricity mix?*
+
+```{r ep-data-exploration-2A}
+#| code-fold: show
+
+EIA_SEP_REPORT |>
+  arrange(desc(CO2_MWh)) |>
+  mutate(rank = row_number()) |>
+  select(
+    rank,
+    state,
+    primary_source,
+    CO2_MWh,
+    electricity_price_MWh,
+    generation_MWh
+  ) |>
+  slice_head(n = 5) |>
+  gt() |>
+  cols_label(
+    rank = "Rank",
+    state = "State",
+    primary_source = "Primary Source",
+    CO2_MWh = "CO₂/MWh",
+    electricity_price_MWh = "$/MWh",
+    generation_MWh = "Generation (MWh)"
+  ) |>
+  fmt_number(
+    columns = c(CO2_MWh, electricity_price_MWh),
+    decimals = 1
+  ) |>
+  fmt_number(
+    columns = generation_MWh,
+    decimals = 0,
+    sep_mark = ","
+  ) |>
+  tab_header(
+    title = md("**Highest Carbon-Intensity Electricity Mixes**")
+  )
+```
+
+```{r ep-data-exploration-2B}
+#Alternative method of generating a 'dirtiness' score for each state based on 
+#electricity carbon intensity and price. This method uses min-max normalization 
+#to scale both CO2/MWh and electricity price ($/MWh) between 0 and 1, and then 
+#averages the two normalized values to create a composite 'dirty score'. Higher 
+#scores indicate states with electricity that is both relatively more 
+#carbon-intensive and more expensive. This score can be interpreted as 
+#"How unfavorable are the environmental and economic conditions for 
+#electrication compared to other states?" It does not highlight where 
+#decarbonization efforts are most needed, but rather where electricity is both 
+#relatively more carbon-intensive and more expensive.
+
+EIA_SEP_REPORT_SCORE <-
+  EIA_SEP_REPORT |>
+  mutate(
+    co2_norm =
+      (CO2_MWh - min(CO2_MWh, na.rm = TRUE)) /
+      (max(CO2_MWh, na.rm = TRUE) -
+         min(CO2_MWh, na.rm = TRUE)),
+
+    price_norm =
+      (electricity_price_MWh -
+         min(electricity_price_MWh, na.rm = TRUE)) /
+      (max(electricity_price_MWh, na.rm = TRUE) -
+         min(electricity_price_MWh, na.rm = TRUE)),
+
+    dirty_score =
+      (co2_norm + price_norm) / 2
+  )
+
+EIA_SEP_REPORT_SCORE |>
+  arrange(desc(dirty_score)) |>
+  mutate(rank = row_number()) |>
+  select(
+    rank,
+    state,
+    primary_source,
+    CO2_MWh,
+    electricity_price_MWh,
+    dirty_score
+  ) |>
+  slice_head(n = 5) |>
+  gt() |>
+  cols_label(
+    rank = "Rank",
+    state = "State",
+    primary_source = "Primary Source",
+    CO2_MWh = "CO₂/MWh",
+    electricity_price_MWh = "Price ($/MWh)",
+    dirty_score = "Normalized Dirty Score"
+  ) |>
+  fmt_number(
+    columns = dirty_score,
+    decimals = 3
+  ) |>
+  fmt_number(
+    columns = c(CO2_MWh, electricity_price_MWh),
+    decimals = 1
+  ) |>
+  tab_footnote(
+    footnote = paste(
+      "The Normalized Dirty Score equally weights electricity carbon intensity",
+      "(CO₂ per MWh) and electricity price ($/MWh). Each measure is scaled",
+      "between 0 and 1 using min-max normalization before averaging.",
+      "Higher scores indicate states with electricity that is both relatively",
+      "more carbon-intensive and more expensive."
+    ),
+    locations = cells_column_labels(columns = dirty_score)
+  )
+```
+The first table displayed simply ranks the states by carbon intensity of electricity generation (CO2/MWh). The second table introduces a composite 'dirty score' that equally weights both carbon intensity and electricity price, providing a more holistic view of the environmental and economic conditions for electrification in each state. For example, a state with a clean electric grid will reduce emissions greatly via electrification because it will eliminate diesel emissions by contributing comparatively less emissions via their already clean grid. A state with a dirtier grid will still benefit from electrification by reducing tailpipe diesel emissions, but to a lesser extent because more carbon will be emitted by their comparatively carbon-intensive grid to provide the necessary electricity to electrify transit.
+
+There is some overlap between the tables with West Virginia and Hawaii. This is likely due to West Virginia's historic relationship with coal power and Hawaii's reliance on imported oil for electricity generation. Both states have relatively high electricity prices and carbon intensity, which is reflected in their rankings in both tables.
+
+#### *On average, how many pounds of CO2 are emitted per MWh of electricity produced in the US?*
+```{r ep-data-exploration-3}
+#| code-fold: show
+#| results: hide
+
+AVG_CO2_MWh <- EIA_SEP_REPORT |>
+  summarize(
+    total_generation = sum(generation_MWh, na.rm = TRUE),
+    total_weighted_CO2 = sum(generation_MWh * CO2_MWh, na.rm = TRUE),
+    avg_CO2_MWh = total_weighted_CO2 / total_generation
+  )
+pull(AVG_CO2_MWh)
+```
+
+Using this equation:
+$$
+\text{Weighted Average CO}_2\text{ per MWh}
+=
+\frac{
+\sum_{i=1}^{n}
+(\text{Generation}_i \times \text{CO}_2\text{/MWh}_i)
+}{
+\sum_{i=1}^{n}
+\text{Generation}_i
+}
+$$
+We can calculate that the average C02 emissions per MWh of electricity generation in the United States is approximately `r format(round(AVG_CO2_MWh[3], 1), big.mark = ",")` lbs.
+
+#### *What are the three rarest primary energy sources in the US? What is the associated cost of electricity associated with each source and in what states are they used?*
+
+```{r ep-data-exploration-4}
+#| code-fold: show
+
+EIA_SEP_REPORT |>
+  group_by(primary_source) |>
+  summarize(
+    n_states = n(),
+    avg_electricity_price_MWh = mean(electricity_price_MWh, na.rm = TRUE),
+    states = paste(sort(abbreviation), collapse = ", "),
+    .groups = "drop"
+  ) |>
+  arrange(n_states, primary_source) |>
+  slice_head(n = 3) |>
+  select(
+    primary_source,
+    n_states,
+    avg_electricity_price_MWh,
+    states
+  ) |>
+  gt() |>
+  cols_label(
+    primary_source = "Primary Energy Source",
+    n_states = "Number of States",
+    avg_electricity_price_MWh = "Average Electricity Price ($/MWh)",
+    states = "States"
+  ) |>
+  fmt_number(
+    columns = avg_electricity_price_MWh,
+    decimals = 1
+  ) |>
+  tab_header(
+    title = md("**Three Rarest Primary Energy Sources in the United States**"),
+    subtitle = "Ranked by the number of states where the source is the primary source of electricity generation"
+  )
+```
+Here, we see that wind and hydroelectric are comparatively rare, which makes sense because they are geographically dependent. Hawaii is the only state that uses petroleum as its primary energy source, which is likely due to its lack of access to other energy sources. The average electricity price for petroleum is also the highest of the three rarest primary energy sources, which is likely due to the high cost of importing petroleum to Hawaii.
+
+
+#### *Texas has a reputation as being the home of “dirty fossil fuels” while NY has a reputation as a leader in clean energy. How many times cleaner is NY’s energy mix than that of Texas?*
+
+```{r ep-data-exploration-5}
+#| code-fold: show
+#| results: hide
+
+NY_TX_CLEANNESS <-
+  EIA_SEP_REPORT |>
+  filter(state %in% c("New York", "Texas")) |>
+  select(state, CO2_MWh) |>
+  summarize(
+    times_cleaner =
+      CO2_MWh[state == "Texas"] /
+      CO2_MWh[state == "New York"]
+  ) |>
+  pull(times_cleaner)
+
+NY_TX_CLEANNESS
+```
+New York's electricity grid is
+`r round(NY_TX_CLEANNESS, 2)`
+times cleaner than Texas's when measured by pounds of CO₂ emitted per MWh generated.
+
+This excludes any other factors that may contribute to the overall environmental impact of electricity generation, such as the 'dirty score' used to describe states earlier.
+
+### NTD Energy Usage
+
+#### *Which five transit agencies used the most gallons of fuel (all sources) and how did it breakdown by type?*
+```{r energy-data-exploration-1}
+#| code-fold: show
+
+NTD_ENERGY |>
+  mutate(
+    total_gallons =
+      rowSums(
+        pick(starts_with("gallons_")),
+        na.rm = TRUE
+      )
+  ) |>
+  group_by(agency) |>
+  summarize(
+    total_gallons = sum(total_gallons),
+    .groups = "drop"
+  ) |>
+  arrange(desc(total_gallons)) |>
+  slice_head(n = 20) |>
+  gt() |>
+  cols_label(
+    agency = "Agency",
+    total_gallons = "Total Gallons Consumed"
+  ) |>
+  fmt_number(
+    columns = total_gallons,
+    decimals = 0,
+    sep_mark = ","
+  ) |>
+  tab_header(
+    title = md("**Transit Agencies Consuming the Most Fuel**"),
+    subtitle = "Sum of all reported gallon-based fuel types"
+  )
+
+```
+Unsurprisingly, the ten transit services with that consumme the most gallons of
+fuel annually are all large urban transit agencies.
+
+#### *Across all US public transit, visualize the amounts of each type of fuel used*
+```{r energy-data-exploration-2}
+#| code-fold: show
+FUEL_TOTALS <-
+  NTD_ENERGY |>
+  summarize(
+    across(
+      starts_with("gallons_"),
+      sum,
+      na.rm = TRUE
+    )
+  ) |>
+  pivot_longer(
+    everything(),
+    names_to = "fuel_type",
+    values_to = "gallons"
+  ) |>
+  mutate(
+    pct = gallons / sum(gallons),
+
+    fuel_type = case_when(
+      fuel_type == "gallons_biodiesel" ~ "Bio-Diesel",
+      fuel_type == "gallons_bunker_fuel" ~ "Bunker Fuel",
+      fuel_type == "gallons_compressed_natural_gas" ~ "Compressed Natural Gas",
+      fuel_type == "gallons_diesel_fuel" ~ "Diesel Fuel",
+      fuel_type == "gallons_ethanol" ~ "Ethanol",
+      fuel_type == "gallons_gasoline" ~ "Gasoline",
+      fuel_type == "gallons_kerosene" ~ "Kerosene",
+      fuel_type == "gallons_liquified_nat_gas" ~ "Liquified Natural Gas",
+      fuel_type == "gallons_liquified_petroleum_gas" ~ "Liquified Petroleum Gas",
+      TRUE ~ fuel_type
+    ),
+
+    fuel_type = if_else(
+      pct < 0.02,
+      "Other",
+      fuel_type
+    )
+  ) |>
+  group_by(fuel_type) |>
+  summarize(
+    gallons = sum(gallons),
+    .groups = "drop"
+  ) |>
+  mutate(
+    pct = gallons / sum(gallons),
+    fuel_type = forcats::fct_reorder(
+      fuel_type,
+      gallons,
+      .desc = TRUE
+    )
+  )
+
+ggplot(
+  FUEL_TOTALS,
+  aes(
+    x = "",
+    y = gallons,
+    fill = fuel_type
+  )
+) +
+  geom_col(
+    width = 1,
+    color = "white"
+  ) +
+  coord_polar(theta = "y") +
+  labs(
+    title = "Transit Fuel Consumption Mix",
+    fill = "Fuel Type",
+    caption = "Note: 'Other' includes all fuel sources representing less than 2% of total fuel consumption."
+  ) +
+  theme_void() +
+  theme(
+    legend.position = "right",
+    plot.caption = element_text(
+      hjust = 0,
+      size = 9,
+      face = "italic"
+    )
+  )
+```
+We can see that fossil fuels dominate the energy composition across the country.
+
+
+#### *What is the least commonly used fuel source for US public transit?*
+```{r energy-data-exploration-3}
+#| code-fold: show
+#| warning: FALSE
+#| error: FALSE
+
+LEAST_COMMON_FUEL <-
+  NTD_ENERGY |>
+  summarize(
+    across(
+      starts_with("gallons_"),
+      sum,
+      na.rm = TRUE
+    )
+  ) |>
+  pivot_longer(
+    everything(),
+    names_to = "fuel_type",
+    values_to = "total_gallons"
+  ) |>
+  mutate(
+    fuel_type = case_when(
+      fuel_type == "gallons_biodiesel" ~ "Bio-Diesel",
+      fuel_type == "gallons_bunker_fuel" ~ "Bunker Fuel",
+      fuel_type == "gallons_compressed_natural_gas" ~ "Compressed Natural Gas",
+      fuel_type == "gallons_diesel_fuel" ~ "Diesel Fuel",
+      fuel_type == "gallons_ethanol" ~ "Ethanol",
+      fuel_type == "gallons_gasoline" ~ "Gasoline",
+      fuel_type == "gallons_kerosene" ~ "Kerosene",
+      fuel_type == "gallons_liquified_nat_gas" ~ "Liquified Natural Gas",
+      fuel_type == "gallons_liquified_petroleum_gas" ~ "Liquified Petroleum Gas"
+    )
+  ) |>
+  filter(total_gallons > 0) |>
+  arrange(total_gallons) |>
+  slice(1)
+```
+
+The least commonly used fuel source in U.S. public transit was `r LEAST_COMMON_FUEL$fuel_type`, with only `r scales::comma(round(LEAST_COMMON_FUEL$total_gallons))` gallons reported across all agencies.
+
+### UNDER CONSTRUCTION: NTD Service
+
+#### *Which five transit services have the most UPT annually?*
+```{r service-data-exploration-1}
+
+```
+
+
+#### *What is the average trip length of a trip on MTA NYC? *
+```{r service-data-exploration-2}
+
+```
+#### *Which transit service in NYC has the longest average trip length? *
+```{r service-data-exploration-3}
+
+```
+#### *Which five states has the fewest total miles travelled by public transit?*
+```{r service-data-exploration-4}
+
+```
+#### *Are all states represented in this data? If no, which ones are missing?*
+```{r service-data-exploration-5}
+
+```
+
+Step 4. Data Analysis
+---------------------
+The following section will include more detailed analyses
+
+We will use the 
+[EIA CO2 Emissions Factors](https://www.eia.gov/environment/emissions/co2_vol_mass.php) 
+table from the EIA website we pulled in section 1. We will rename its columns 
+to match the fuel sources from the NTD_ENERGY table we have been using throughout 
+this analysis.
+
+### Total Emissions
+This analysis will calculate the total emissions for each agency and mode combination, as well as the total emissions for each agency across all modes. The results will be summarized in a table and visualized in a bar chart.
+```{r analysis-total-emissions}
+#| code-fold: show
+
+#create a lookup table and join it to eia costs
+FUEL_CO2_LOOKUP <- tribble(
+  ~fuel, ~eia_fuel,
+  "gallons_biodiesel", "Motor Gasolinea",
+  "gallons_bunker_fuel", "Residual Heating Fuel",
+  "gallons_compressed_natural_gas", "Natural Gas",
+  "gallons_diesel_fuel", "Diesel and Home Heating Fuel (Distillate Fuel Oil)",
+  "gallons_ethanol",  "Propane",
+  "gallons_gasoline", "Finished Motor Gasoline",
+  "gallons_kerosene", "Kerosene",
+  "gallons_liquified_nat_gas", "Natural Gas",
+  "gallons_liquified_petroleum_gas", "Propane"
+) |>
+  left_join(EIA_CO2_FACTORS,
+            by = c("eia_fuel" = "fuel")
+            ) |>
+  select(fuel, lb_co2_per_unit
+  )
+# Create electricity lookup table by state
+ELECTRICTY_CO2_LOOKUP <- EIA_SEP_REPORT |>
+  select(
+    abbreviation,
+    CO2_MWh
+  ) |>
+  rename(
+    co2_per_mwh = CO2_MWh
+  )
+
+
+#pivot to get fuel rows
+FUEL_LONG <- NTD_COMBINED |>
+  pivot_longer(
+    cols = c(
+      gallons_biodiesel,
+      gallons_bunker_fuel,
+      gallons_compressed_natural_gas,
+      gallons_diesel_fuel,
+      gallons_ethanol,
+      gallons_gasoline,
+      kilograms_hydrogen,
+      gallons_kerosene,
+      gallons_liquified_nat_gas,
+      gallons_liquified_petroleum_gas
+    ),
+    names_to = "fuel_type",
+    values_to = "fuel_used"
+  ) |>
+  filter(fuel_used > 0) |>
+  left_join(
+    FUEL_CO2_LOOKUP,
+    by = c("fuel_type" = "fuel")
+  )|>
+  mutate(co2_output = fuel_used * lb_co2_per_unit)
+
+#pivot to create electricity rows
+ELECTRIC_LONG <- NTD_COMBINED |>
+  pivot_longer(
+    cols = c(
+      kwh_electric_battery,
+      kwh_electric_propulsion
+    ),
+    names_to = "fuel_type",
+    values_to = "fuel_used"
+  ) |>
+  filter(fuel_used > 0) |>
+  left_join(
+    ELECTRICTY_CO2_LOOKUP,
+    by = c("state" = "abbreviation")
+  ) |>
+  mutate(
+    fuel_used_mwh = fuel_used / 1000,
+    co2_output = fuel_used_mwh * co2_per_mwh
+  )
+
+#combining all the tables and selecting rows for aligned data
+all_emissions_long <- bind_rows(
+  FUEL_LONG,
+  ELECTRIC_LONG
+) |>
+  select(
+    ntd_id,
+    mode,
+    mode_name = mode_name.x,
+    agency = agency.x,
+    state,
+    fuel_type,
+    fuel_used,
+    co2_output
+  ) |>
+  filter(!is.na(co2_output))
+  
+#Join based on these 2 tables
+CO2_EMISSIONS_BY_AGENCY <- all_emissions_long |>
+  group_by(
+    agency,
+    mode
+  ) |>
+  summarise(
+    total_co2_output = sum(co2_output, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+#create final data with all columns
+FINAL_DATA <- CO2_EMISSIONS_BY_AGENCY |>
+  left_join(
+    NTD_COMBINED,
+    by = c("agency" = "agency.x", "mode")
+  ) |>
+  select(
+    agency,
+    mode,
+    state,
+    gallons_biodiesel,
+    gallons_bunker_fuel,
+    gallons_compressed_natural_gas,
+    gallons_diesel_fuel,
+    gallons_ethanol,
+    gallons_gasoline,
+    kilograms_hydrogen,
+    gallons_kerosene,
+    gallons_liquified_nat_gas,
+    gallons_liquified_petroleum_gas,
+    kwh_electric_battery,
+    kwh_electric_propulsion,
+    CO2_MWh,
+    total_co2_output
+  )
+```
+This list provides us with the top 10 Agency-Mode combinations that emit the greatest amount of CO2.
+
+
+### Total Emissions per Capita
+```{r analysis-emissions-per-capita}
+#| code-fold: show
+#| warning: false
+
+#creating table for both analyses
+
+#This table produces 2 instances of many-to-many relationships, but it does not 
+#matter for the purposes of this analysis because we are only interested in the 
+#total emissions and total UPT for each agency-mode combination. The 
+#many-to-many relationships will not affect the totals, but it is important to 
+#note that this is not a clean join and should be treated with caution if used 
+#for other purposes. The 'size_category' column is created by dividing the 
+#agencies into three equal groups based on their total passenger miles. This is 
+#done using the 'ntile' function, which assigns a rank to each agency based on 
+#their total passenger miles and then divides them into three groups 
+#(small, medium, large). The resulting table includes the total CO2 emissions, 
+#total UPT, total passenger miles, CO2 emissions per capita, and size category 
+#for each agency-mode combination. For the purposes of this analysis, transit
+#agencies with fewer than 1000 UPT are filtered out
+
+EMISSIONS_PER_CAPITA <- FINAL_DATA |>
+  left_join(
+    NTD_SERVICE |>
+      select(agency, mode, total_upt, sum_passenger_miles),
+    by = c("agency", "mode")
+  ) |>
+  mutate(
+    emissions_per_upt = total_co2_output / total_upt,
+    emissions_per_passenger_mile = total_co2_output / sum_passenger_miles
+  ) |>
+  mutate(
+    size_category = c("Small", "Medium", "Large")[
+      ntile(sum_passenger_miles, 3)
+    ]
+  ) |> 
+  select(
+    c(
+      agency,      
+      mode,
+      total_co2_output,
+      total_upt,
+      sum_passenger_miles,
+      emissions_per_upt,
+      emissions_per_passenger_mile,
+      size_category)
+    )|>
+    drop_na(c(total_co2_output, total_upt, sum_passenger_miles)) |>
+  filter(total_upt > 1000 )
+
+#summarizing EMISSIONS_PER_CAPITA to represent all modes by agency
+EMISSIONS_PER_CAPITA_AGENCY <- EMISSIONS_PER_CAPITA |>
+  group_by(agency) |>
+  summarize(
+    total_co2_output = sum(total_co2_output, na.rm = TRUE),
+    total_upt = sum(total_upt, na.rm = TRUE),
+    passenger_miles = sum(sum_passenger_miles, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  mutate(
+    emissions_per_upt = total_co2_output / total_upt,
+    emissions_per_passenger_mile = total_co2_output / passenger_miles,
+    size_category = case_when(
+      ntile(passenger_miles, 3) == 1 ~ "Small",
+      ntile(passenger_miles, 3) == 2 ~ "Medium",
+      ntile(passenger_miles, 3) == 3 ~ "Large"
+    )
+  )
+#gt for lowest emissions per UPT :Small
+gt_small_upt <- EMISSIONS_PER_CAPITA_AGENCY |>
+  filter(size_category == "Small") |>
+  slice_min(emissions_per_upt, n = 5, with_ties = FALSE) |>
+  select(agency, emissions_per_upt) |>
+  gt() |>
+  cols_label(
+    agency = "Agency",
+    emissions_per_upt = "CO₂ per UPT"
+  ) |>
+  fmt_number(
+    emissions_per_upt,
+    decimals = 6
+  ) |>
+  tab_header(
+    title = md("**Top 5 Small Agencies by Lowest Emissions per UPT**")
+  ) |>
+  tab_footnote(
+    footnote = "'Size' determined by tertiles of total passenger miles, excluding agencies with fewer than 1,000 UPT"
+  )
+gt_small_upt
+
+#gt for lowest emissions per UPT :Medium 
+gt_medium_upt <- EMISSIONS_PER_CAPITA_AGENCY |>
+  filter(size_category == "Medium") |>
+  slice_min(emissions_per_upt, n = 5, with_ties = FALSE) |>
+  select(agency, emissions_per_upt) |>
+  gt() |>
+  cols_label(
+    agency = "Agency",
+    emissions_per_upt = "CO₂ per UPT"
+  ) |>
+  fmt_number(
+    emissions_per_upt,
+    decimals = 6
+  ) |>
+  tab_header(
+    title = md("**Top 5 Medium Agencies by Lowest Emissions per UPT**")
+  )|>
+  tab_footnote(
+    footnote = "'Size' determined by tertiles of total passenger miles, excluding agencies with fewer than 1,000 UPT"
+  )
+gt_medium_upt
+
+#gt for lowest emissions per UPT :Large
+gt_large_upt <- EMISSIONS_PER_CAPITA_AGENCY |>
+  filter(size_category == "Large") |>
+  slice_min(emissions_per_upt, n = 5, with_ties = FALSE) |>
+  select(agency, emissions_per_upt) |>
+  gt() |>
+  cols_label(
+    agency = "Agency",
+    emissions_per_upt = "CO₂ per UPT"
+  ) |>
+  fmt_number(
+    emissions_per_upt,
+    decimals = 6
+  ) |>
+  tab_header(
+    title = md("**Top 5 Large Agencies by Lowest Emissions per UPT**")
+  )|>
+  tab_footnote(
+    footnote = "'Size' determined by tertiles of total passenger miles, excluding agencies with fewer than 1,000 UPT"
+  )
+gt_large_upt 
+
+#gt for lowest emissions per passenger miles :Small
+gt_small_mile <- EMISSIONS_PER_CAPITA_AGENCY |>
+  filter(size_category == "Small") |>
+  slice_min(emissions_per_passenger_mile, n = 5, with_ties = FALSE) |>
+  select(agency, emissions_per_passenger_mile) |>
+  gt() |>
+  cols_label(
+    agency = "Agency",
+    emissions_per_passenger_mile = "CO₂ per Passenger Mile"
+  ) |>
+  fmt_number(
+    emissions_per_passenger_mile,
+    decimals = 8
+  ) |>
+  tab_header(
+    title = md("**Top 5 Small Agencies by Lowest Emissions per Passenger Mile**")
+  )|>
+  tab_footnote(
+    footnote = "'Size' determined by tertiles of total passenger miles, excluding agencies with fewer than 1,000 UPT"
+  )
+gt_small_mile
+
+#gt for lowest emissions per passenger miles:Medium
+gt_medium_mile <- EMISSIONS_PER_CAPITA_AGENCY |>
+  filter(size_category == "Medium") |>
+  slice_min(emissions_per_passenger_mile, n = 5, with_ties = FALSE) |>
+  select(agency, emissions_per_passenger_mile) |>
+  gt() |>
+  cols_label(
+    agency = "Agency",
+    emissions_per_passenger_mile = "CO₂ per Passenger Mile"
+  ) |>
+  fmt_number(
+    emissions_per_passenger_mile,
+    decimals = 8
+  ) |>
+  tab_header(
+    title = md("**Top 5 Medium Agencies by Lowest Emissions per Passenger Mile**")
+  )|>
+  tab_footnote(
+    footnote = "'Size' determined by tertiles of total passenger miles, excluding agencies with fewer than 1,000 UPT"
+  )
+gt_medium_mile
+
+#gt for lowest emissions per passenger miles:Large
+gt_large_mile <- EMISSIONS_PER_CAPITA_AGENCY |>
+  filter(size_category == "Large") |>
+  slice_min(emissions_per_passenger_mile, n = 5, with_ties = FALSE) |>
+  select(agency, emissions_per_passenger_mile) |>
+  gt() |>
+  cols_label(
+    agency = "Agency",
+    emissions_per_passenger_mile = "CO₂ per Passenger Mile"
+  ) |>
+  fmt_number(
+    emissions_per_passenger_mile,
+    decimals = 8
+  ) |>
+  tab_header(
+    title = md("**Top 5 Large Agencies by Lowest Emissions per Passenger Mile**")
+  )|>
+  tab_footnote(
+    footnote = "'Size' determined by tertiles of total passenger miles, excluding agencies with fewer than 1,000 UPT"
+  )
+gt_large_mile
+```
+
+Press Release
+==============
+
+---
+
+## "Texas is the *New* New York!" and it's got nothing to do with elections...
+
+**November 9, 2026**
+
+## Transit Agency Emissions Researcher Awards "Greenest Transit" Title to McKinney Avenue Transit Authority: A Small Streetcar with a Big Impact
+
+**Dallas, TX** — A new analysis of public transit agencies across the United States found substantial variation in carbon emissions per passenger trip. Unexpectedly, it also found that the small 'M-Line' trolley system in Dallas produced the least amount of CO2 per trip of *any* transit system in the U.S. -- including the MTA New York CIty Transit. McKinney clocked in at `r signif(EMISSIONS_PER_CAPITA_AGENCY$emissions_per_upt[101], 2)` pounds per trip compared to the national average of `r signif(mean(EMISSIONS_PER_CAPITA_AGENCY$emissions_per_upt),2)` pounds.
+
+The study examined fuel consumption, electricity use, and ridership data reported through the National Transit Database (NTD). Emissions estimates incorporated both direct fuel usage and indirect emissions from purchased electricity using state-specific electric grid carbon intensity factors.
+
+"Our findings show that woke *is*, in fact, back. But so is green energy in Texas" said Willie Carlock, the study's author. "Maybe next year, New York. In the meantime, why don't you work on those L train schedules. I personally watched half of Dallas' emissions get burned waiting between Lorimer and Graham."    
+
+## Key Findings
+
+```{r release-visualization-1}
+#| echo: FALSE
+
+EMISSIONS_PER_CAPITA_AGENCY |>
+  filter(
+    !is.na(emissions_per_upt),
+    emissions_per_upt > 0
+  ) |>
+  slice_min(
+    emissions_per_upt,
+    n = 10,
+    with_ties = FALSE
+  ) |>
+  arrange(emissions_per_upt) |>
+  mutate(
+    agency = factor(
+      agency,
+      levels = agency
+    )
+  ) |>
+  ggplot(
+    aes(
+      x = agency,
+      y = emissions_per_upt
+    )
+  ) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(
+    title = "Lowest Emissions per Unlinked Passenger Trip",
+    subtitle = "Top 10 U.S. Transit Agencies",
+    x = NULL,
+    y = "CO2 per UPT"
+  ) +
+  theme_minimal() +
+  scale_x_discrete(limits = rev)
+```
+
+
+- Mckinney Avenue Transit Authority (MATA) in Dallas, TX produced the lowest emissions per passenger trip of any U.S. transit agency, edging out  the MTA New York City Transit for the first spot
+- While large transit agencies benefit from economies of scale and higher rider volumes smaller agencies can achieve low emissions per trip through efficient operations and clean energy sources.
+- Significant differences existed between agencies of similar size due to variations in fuel mix, ridership patterns, and regional electricity generation portfolios.
+- Accounting for electricity\-related emissions materially changed the emissions rankings of many transit agencies.
+
+
+
+## The Uncanny Valley Metro However...
+
+**November 9, 2026**
+
+## Transit Agency Emissions Researcher Awards "Reddest Transit" Title to City of Glendale, AZ: Small Bus System with a Big Carbon Footprint 
+
+**Glendale, AZ** — While Dallas showed us that small transit systems can be mighty green, Glendale *almost* proves that it's harder. Glendale released a staggering `r signif(EMISSIONS_PER_CAPITA_AGENCY$emissions_per_upt[34], 3)` pounds of CO2 per trip: a whole `r signif((EMISSIONS_PER_CAPITA_AGENCY$emissions_per_upt[34] - EMISSIONS_PER_CAPITA_AGENCY$emissions_per_upt[101]),3)` pounds more, or roughly the weight of an adult reindeer.
+
+"But this isn't a simple issue to solve...", said the author. The reason that this number is so high is because the public transit there consists largely of ADA services, Dial-a-Rides, urban shuttles, and other low-capacity services -- all running on gasoline. So while it's easy to point and laugh, ultimately, "...the city is providing services that the public needs." We all love poking fun at the biggest number, but, "...it is important to not lose focus..." says Willie. "The Jacksonville Transportation Authority (JTA), for example, also sits on that list. It is the largest transit agency in Florida and it is the largest transit agency in the U.S. to operate a fleet of all-electric buses, so it's clear those emissions are part of a larger electric grid problem."
+
+The author continued to comment on how any public transit is better than none, and that this award was only meant to bring attention to some of the greater challenges in facing transit decarbonization. He also sends his regards to the mayor of Glendale.
+
+```{r release-visualization-2}
+#| echo: FALSE
+
+EMISSIONS_PER_CAPITA_AGENCY |>
+  filter(
+    !is.na(emissions_per_upt),
+    emissions_per_upt > 0
+  ) |>
+  slice_max(
+    emissions_per_upt,
+    n = 10,
+    with_ties = FALSE
+  ) |>
+  arrange(emissions_per_upt) |>
+  mutate(
+    agency = factor(
+      agency,
+      levels = agency
+    )
+  ) |>
+  ggplot(
+    aes(
+      x = agency,
+      y = emissions_per_upt
+    )
+  ) +
+  geom_col(fill = "red") +
+  coord_flip() +
+  labs(
+    title = "Highest Emissions per Unlinked Passenger Trip",
+    subtitle = "Bottom 10 U.S. Transit Agencies",
+    x = NULL,
+    y = "CO2 per UPT"
+  ) +
+  theme_minimal()
+```
+
+
+## Methodology
+
+The analysis combined multiple federal datasets, including:
+
+- National Transit Database fuel and energy consumption records.
+- National Transit Database service and ridership statistics.
+- U.S. Energy Information Administration electricity generation data.
+- U.S. Energy Information Administration carbon dioxide emissions factors.
+
+Agency\-level emissions were calculated by converting fuel and electricity consumption into carbon emission equivalents and aggregating results across all modes of transit operated by each agency. Agencies were subsequently categorized into small, medium, and large groups based on total passenger miles traveled.
+
+## Implications
+
+The results suggest that transit decarbonization strategies should consider both vehicle technology and regional electricity generation characteristics. Investments in grid decarbonization may be as important as fleet electrification for achieving substantial emissions reductions.
+
+## Contact
+
+William Carlock
+
+Exhausted Grad Student
+
+Email: [Do not contact me](https://en.wikipedia.org/wiki/Practical_joke)
+
+---
+
+
+::: {.callout-note title="AI Usage Statement" collapse="true"}
+
+Microsoft Co-Pilot  was used to generate code while completing this 
+project. No other generative AI tools were used.
+
+:::

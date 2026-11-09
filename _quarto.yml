@@ -29,7 +29,7 @@ website:
           - text: "Netflix Analysis"
             href: mp01.qmd
           
-          - text: "Project 2"
+          - text: "Clean Transit"
             href: mp02.qmd
             
           - text: "Project 3"
